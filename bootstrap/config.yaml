@@ -8,7 +8,7 @@ project:
 # S3 State Bucket Configuration
 s3:
   # Must be globally unique. Convention: <project>-terraform-state
-  # bucket_name: "devops-project-terraform-state"  # Optional: omit to auto-generate with random suffix
+  bucket_name: "devops-project-terraform-state-4ar0p0xb"  # Optional: omit to auto-generate with random suffix
   versioning: true
   encryption: true
   block_public_access: true

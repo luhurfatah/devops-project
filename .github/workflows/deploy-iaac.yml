@@ -59,9 +59,9 @@ jobs:
         working-directory: iaac/terragrunt/env/${{ github.event.inputs.environment }}
         run: |
           if [ "${{ github.event.inputs.action }}" == "plan" ]; then
-            terragrunt run-all plan -out=tfplan
+            terragrunt run-all plan -out=tfplan --terragrunt-non-interactive
           elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
-            terragrunt run-all apply -auto-approve
+            terragrunt run-all apply -auto-approve --terragrunt-non-interactive
           elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
-            terragrunt run-all destroy -auto-approve
+            terragrunt run-all destroy -auto-approve --terragrunt-non-interactive
           fi
