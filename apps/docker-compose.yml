@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kms_password}
+      POSTGRES_DB: ${POSTGRES_DB:-kms}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kms} -d ${POSTGRES_DB:-kms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: ./api
+    container_name: kms-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-kms}:${POSTGRES_PASSWORD:-kms_password}@db:5432/${POSTGRES_DB:-kms}?sslmode=disable
+      PORT: "8080"
+      SEED_DATA: "${SEED_DATA:-true}"
+      # Auth: single admin (env-configured) + HMAC-signed bearer tokens.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTH_SECRET: ${AUTH_SECRET:-please-change-me-in-production}
+      AUTH_TTL_HOURS: "${AUTH_TTL_HOURS:-24}"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+    container_name: kms-web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8080
+      PORT: "3000"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+    driver: local

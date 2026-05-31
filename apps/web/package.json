@@ -1,0 +1,15 @@
+{
+  "name": "kms-web",
+  "version": "1.0.0",
+  "description": "Knowledge Management System — web frontend (serves static UI + proxies /api to the Go API)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

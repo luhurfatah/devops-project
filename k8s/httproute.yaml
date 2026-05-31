@@ -1,0 +1,43 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kms-web-route
+  labels:
+    app: kms
+    component: web
+spec:
+  parentRefs:
+    - name: kms-gateway
+      sectionName: http
+  hostnames:
+    - kms.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: kms-web
+          port: 3000
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kms-api-route
+  labels:
+    app: kms
+    component: api
+spec:
+  parentRefs:
+    - name: kms-gateway
+      sectionName: http
+  hostnames:
+    - api.kms.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: kms-api
+          port: 8080

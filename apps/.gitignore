@@ -1,0 +1,18 @@
+# env
+.env
+
+# node
+node_modules/
+npm-debug.log*
+
+# go
+/api/kms-api
+/api/bin/
+
+# nix / direnv
+.direnv/
+result
+result-*
+
+# os
+.DS_Store

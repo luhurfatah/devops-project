@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KMS — Knowledge Management System</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Fira+Code:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-vsc-dark-plus.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div id="progress-bar-container">
+    <div id="progress-bar"></div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo" id="logo-btn" style="cursor: pointer;" title="Go to Dashboard">
+          <i class="fa-solid fa-database"></i>
+          <span>KMS</span>
+        </div>
+        <button id="sidebar-toggle" class="btn-icon" title="Toggle Sidebar">
+          <i class="fa-solid fa-angles-left"></i>
+        </button>
+      </div>
+
+      <div class="search-container">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input type="text" id="search-input" placeholder="Search knowledge base...">
+        <button id="search-clear" class="btn-icon hidden" title="Clear Search">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="new-category-btn" class="sidebar-btn" title="Create a category">
+          <i class="fa-solid fa-folder-plus"></i> Category
+        </button>
+        <button id="new-document-btn" class="sidebar-btn" title="Create a document">
+          <i class="fa-solid fa-file-circle-plus"></i> Document
+        </button>
+      </div>
+
+      <nav class="file-tree" id="file-tree">
+        <div class="loading-spinner">
+          <i class="fa-solid fa-circle-notch fa-spin"></i> Loading index...
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="user-info">
+          <i class="fa-solid fa-server"></i> Go API + Postgres
+        </span>
+      </div>
+    </aside>
+
+    <div class="sidebar-resizer" id="sidebar-resizer"></div>
+
+    <!-- Main -->
+    <main class="main-content">
+      <header class="content-header">
+        <button id="menu-toggle" class="btn-icon" title="Open Navigation">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div class="breadcrumbs" id="breadcrumbs">
+          <span>Dashboard</span>
+        </div>
+
+        <div class="header-actions">
+          <button id="edit-btn" class="action-btn hidden" title="Edit document">
+            <i class="fa-solid fa-pen"></i> Edit
+          </button>
+          <button id="delete-btn" class="action-btn danger hidden" title="Delete document">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+          <button id="auth-btn" class="action-btn" title="Sign in">
+            <i class="fa-solid fa-right-to-bracket"></i> <span id="auth-label">Login</span>
+          </button>
+          <button id="theme-toggle" class="btn-icon" title="Toggle Dark/Light Mode">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+        </div>
+      </header>
+
+      <article class="content-body">
+
+        <!-- Welcome / Dashboard -->
+        <div id="welcome-screen" class="welcome-container">
+          <div class="welcome-card">
+            <h1>Knowledge Management System</h1>
+            <p class="intro-lead">A real KMS with full <b>CRUD</b> — documents live in <b>Postgres</b>, served by a
+              <b>Go API</b>, rendered here.</p>
+            <p class="intro-sub">Pick a document from the sidebar, or create a new one. Everything you write is
+              persisted to the database.</p>
+            <div class="features-section">
+              <h3 class="features-heading">Features</h3>
+              <div class="features-grid">
+                <div class="feature-card"><i class="fa-solid fa-pen-to-square feature-icon"></i><strong>Create &
+                    Edit</strong></div>
+                <div class="feature-card"><i class="fa-solid fa-database feature-icon"></i><strong>Postgres
+                    Storage</strong></div>
+                <div class="feature-card"><i class="fa-solid fa-magnifying-glass feature-icon"></i><strong>Full-text
+                    Search</strong></div>
+                <div class="feature-card"><i class="fa-solid fa-code feature-icon"></i><strong>Live
+                    Preview</strong></div>
+                <div class="feature-card"><i class="fa-solid fa-copy feature-icon"></i><strong>Copy
+                    Code</strong></div>
+                <div class="feature-card"><i class="fa-solid fa-moon feature-icon"></i><strong>Dark &
+                    Light</strong></div>
+              </div>
+            </div>
+            <div class="ai-disclaimer">
+              <i class="fa-solid fa-server ai-disclaimer-icon"></i>
+              <p>Frontend: Node/Express · API: Go · Database: PostgreSQL · Orchestrated with Docker Compose & Nix.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reader -->
+        <div id="markdown-container" class="markdown-body hidden"></div>
+
+        <!-- Editor -->
+        <div id="editor" class="editor hidden">
+          <div class="editor-meta">
+            <input type="text" id="editor-title" class="editor-title-input" placeholder="Document title">
+            <select id="editor-category" class="editor-category-select"></select>
+          </div>
+          <div class="editor-split">
+            <div class="editor-pane">
+              <div class="editor-pane-header"><i class="fa-brands fa-markdown"></i> Markdown</div>
+              <textarea id="editor-content" class="editor-textarea" spellcheck="false"
+                placeholder="# Write your Markdown here..."></textarea>
+            </div>
+            <div class="editor-pane">
+              <div class="editor-pane-header"><i class="fa-solid fa-eye"></i> Preview</div>
+              <div id="editor-preview" class="editor-preview markdown-body"></div>
+            </div>
+          </div>
+          <div class="editor-footer">
+            <button id="editor-cancel" class="action-btn"><i class="fa-solid fa-xmark"></i> Cancel</button>
+            <button id="editor-save" class="action-btn primary"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
+
+  <!-- Floating tools (reader only) -->
+  <div id="floating-toolbar" class="floating-toolbar">
+    <button id="width-toggle" class="btn-float" title="Toggle Content Width"><i
+        class="fa-solid fa-left-right"></i></button>
+    <button id="font-increase" class="btn-float" title="Increase Font Size"><i class="fa-solid fa-plus"></i></button>
+    <button id="font-decrease" class="btn-float" title="Decrease Font Size"><i class="fa-solid fa-minus"></i></button>
+  </div>
+
+  <button id="back-to-top" title="Back to top" aria-label="Scroll back to top"><i
+      class="fa-solid fa-arrow-up"></i></button>
+
+  <!-- Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="modal-title">Title</h3>
+      <p id="modal-desc"></p>
+      <input type="text" id="modal-input" autocomplete="off">
+      <div class="modal-actions">
+        <button id="modal-cancel" class="action-btn">Cancel</button>
+        <button id="modal-confirm" class="action-btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login modal -->
+  <div id="login-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3><i class="fa-solid fa-lock"></i> Sign in</h3>
+      <p>Enter your admin credentials to create, edit, or delete documents.</p>
+      <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+      <div class="modal-actions">
+        <button id="login-cancel" class="action-btn">Cancel</button>
+        <button id="login-submit" class="action-btn primary"><i class="fa-solid fa-right-to-bracket"></i> Sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-docker.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-hcl.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

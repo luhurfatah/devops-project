@@ -1,0 +1,67 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Terraform / Terragrunt
+.terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+.terragrunt-cache
+terragrunt-debug.tfvars
+
+# Python
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov/
+.venv
+venv
+env
+
+# Node
+node_modules
+.env
+.env.*
+
+# Go
+*.exe
+*.test
+
+# Secrets / credentials
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+.secrets
+
+# Terraform/ Terragrunt override files (local)
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+
+# Terragrunt generated files
+backend.tf
+provider.tf
+versions.tf
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+.kilo
