@@ -1,10 +1,17 @@
+# Production environment configuration
+locals {
+  environment  = "prod"
+  project_name = "devops-project"
+  region       = "us-east-1"
+}
+
 include "root" {
-  path = find_in_parent_folders()
+  path = find_in_parent_folders("root.hcl")
 }
 
 # Source the root module
 terraform {
-  source = "../../modules/aws-infra"
+  source = "../../../modules/aws-infra"
 }
 
 inputs = {
@@ -12,7 +19,7 @@ inputs = {
   project_name         = local.project_name
   region               = local.region
 
-  # VPC - largest CIDR for production with HA across 3 AZs
+  # VPC - largest CIDR for production with 3 AZs
   vpc_cidr             = "10.100.0.0/16"
   availability_zones   = ["us-east-1a", "us-east-1b", "us-east-1c"]
   public_subnet_cidrs  = ["10.100.1.0/24", "10.100.2.0/24", "10.100.3.0/24"]
@@ -28,8 +35,8 @@ inputs = {
   # EKS
   eks_cluster_version          = "1.30"
   eks_endpoint_private_access  = true
-  eks_endpoint_public_access   = false  # Private only for production
-  eks_public_access_cidrs      = []     # No public access
+  eks_endpoint_public_access   = false
+  eks_public_access_cidrs      = []
 
   # Fargate Profiles - comprehensive for production workloads
   fargate_profiles = {
@@ -76,7 +83,7 @@ inputs = {
   # Tags
   tags = {
     Environment = "prod"
-    Project     = "myapp"
+    Project     = "devops-project"
     ManagedBy   = "terragrunt"
   }
 }

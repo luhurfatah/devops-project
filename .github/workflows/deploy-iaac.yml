@@ -42,7 +42,15 @@ jobs:
         with:
           terraform_version: '1.9.5'
 
+      - name: Cache Terragrunt
+        uses: actions/cache@v4
+        id: cache-terragrunt
+        with:
+          path: /usr/local/bin/terragrunt
+          key: terragrunt-v0_54_3-${{ runner.os }}-amd64
+
       - name: Setup Terragrunt
+        if: steps.cache-terragrunt.outputs.cache-hit != 'true'
         run: |
           wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.3/terragrunt_linux_amd64
           chmod +x terragrunt_linux_amd64

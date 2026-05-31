@@ -1,10 +1,17 @@
+# Dev environment configuration
+locals {
+  environment  = "dev"
+  project_name = "devops-project"
+  region       = "us-east-1"
+}
+
 include "root" {
-  path = find_in_parent_folders()
+  path = find_in_parent_folders("root.hcl")
 }
 
 # Source the root module
 terraform {
-  source = "../../modules/aws-infra"
+  source = "../../../modules/aws-infra"
 }
 
 inputs = {

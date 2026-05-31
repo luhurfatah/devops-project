@@ -2,24 +2,15 @@
 # This file defines the remote state backend and provider configuration
 # shared across all environments.
 
-# Read environment-specific configuration
-locals {
-  env_vars = read_terragrunt_config("${path_relative_to_include()}/env.hcl")
-  environment  = local.env_vars.locals.environment
-  project_name = local.env_vars.locals.project_name
-  region       = local.env_vars.locals.region
-}
-
-# Generate remote state backend configuration with S3 locking
 generate "backend" {
   path      = "backend.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
   backend "s3" {
-    bucket         = "${local.project_name}-terraform-state"
-    key            = "${local.project_name}/${local.environment}/terraform.tfstate"
-    region         = local.region
+    bucket         = "devops-project-terraform-state-4ar0p0xb"
+    key            = "${path_relative_to_include()}/terraform.tfstate"
+    region         = "us-east-1"
     encrypt        = true
     use_lockfile   = true
   }
@@ -27,18 +18,16 @@ terraform {
 EOF
 }
 
-# Generate provider configuration for all child modules
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
 provider "aws" {
-  region = local.region
+  region = "us-east-1"
 
   default_tags {
     tags = {
-      Environment = local.environment
-      Project     = local.project_name
+      Project     = "devops-project"
       ManagedBy   = "terragrunt"
     }
   }
@@ -46,7 +35,6 @@ provider "aws" {
 EOF
 }
 
-# Generate versions file
 generate "versions" {
   path      = "versions.tf"
   if_exists = "overwrite_terragrunt"

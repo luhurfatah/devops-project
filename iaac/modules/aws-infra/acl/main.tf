@@ -45,8 +45,8 @@ resource "aws_network_acl" "public" {
     rule_no    = 140
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = -1
-    to_port    = -1
+    from_port  = 0
+    to_port    = 0
   }
 
   egress {
@@ -91,8 +91,8 @@ resource "aws_network_acl" "public" {
     rule_no    = 140
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = -1
-    to_port    = -1
+    from_port  = 0
+    to_port    = 0
   }
 
   tags = merge(var.common_tags, {
