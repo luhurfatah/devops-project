@@ -50,12 +50,12 @@ jobs:
           terragrunt --version
 
       - name: Terragrunt ${{ github.event.inputs.action }}
-        working-directory: ./iaac/terragrunt/env/${{ github.event.inputs.environment }}
+        working-directory: iaac/terragrunt/env/${{ github.event.inputs.environment }}
         run: |
           if [ "${{ github.event.inputs.action }}" == "plan" ]; then
-            terragrunt run-all plan -out=tfplan -lock=false
+            terragrunt run-all plan -out=tfplan
           elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
-            terragrunt run-all apply -auto-approve -lock=false
+            terragrunt run-all apply -auto-approve
           elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
-            terragrunt run-all destroy -auto-approve -lock=false
+            terragrunt run-all destroy -auto-approve
           fi
