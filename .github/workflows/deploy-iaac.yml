@@ -1,0 +1,61 @@
+name: IaAC Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stag
+          - prod
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::767397985067:role/github-actions-role
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.5'
+
+      - name: Setup Terragrunt
+        run: |
+          wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.3/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Terragrunt ${{ github.event.inputs.action }}
+        working-directory: ./iaac/terragrunt/env/${{ github.event.inputs.environment }}
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "plan" ]; then
+            terragrunt run-all plan -out=tfplan -lock=false
+          elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
+            terragrunt run-all apply -auto-approve -lock=false
+          elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            terragrunt run-all destroy -auto-approve -lock=false
+          fi
