@@ -1,4 +1,4 @@
-name: IaAC Deployment
+name: IaaC Deployment
 
 on:
   workflow_dispatch:
