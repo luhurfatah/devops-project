@@ -25,7 +25,6 @@ __pycache__
 htmlcov/
 .venv
 venv
-env
 
 # Node
 node_modules
