@@ -12,34 +12,34 @@ soft-fail: false
 # ---------------------------------------------------------------------------
 skip-check:
   # General/Backend
-  - CKV_TF_1      # Ensure Terraform module sources use a commit hash (we use local relative paths)
-  - CKV_TF_2      # Ensure Terraform module sources use a tag
-  - CKV_AWS_145   # Ensure S3 buckets are encrypted with KMS (default SSE is acceptable for state buckets)
-  - CKV_AWS_18    # Ensure S3 bucket has KMS encryption
-  - CKV_AWS_21    # Ensure S3 bucket has versioning enabled
-  - CKV2_AWS_62   # Ensure S3 bucket should have event notifications
+  # - CKV_TF_1      # Ensure Terraform module sources use a commit hash (we use local relative paths)
+  # - CKV_TF_2      # Ensure Terraform module sources use a tag
+  # - CKV_AWS_145   # Ensure S3 buckets are encrypted with KMS (default SSE is acceptable for state buckets)
+  # - CKV_AWS_18    # Ensure S3 bucket has KMS encryption
+  # - CKV_AWS_21    # Ensure S3 bucket has versioning enabled
+  # - CKV2_AWS_62   # Ensure S3 bucket should have event notifications
 
-  # EKS Cluster
-  - CKV_AWS_37    # Ensure Amazon EKS control plane logging is enabled
-  - CKV_AWS_38    # Ensure Amazon EKS public endpoint is disabled (we restrict via CIDR but keep public access enabled)
-  - CKV_AWS_39    # Ensure Amazon EKS public endpoint access is disabled
-  - CKV_AWS_58    # Ensure EKS Cluster has Secrets Encryption enabled
+  # # EKS Cluster
+  # - CKV_AWS_37    # Ensure Amazon EKS control plane logging is enabled
+  # - CKV_AWS_38    # Ensure Amazon EKS public endpoint is disabled (we restrict via CIDR but keep public access enabled)
+  # - CKV_AWS_39    # Ensure Amazon EKS public endpoint access is disabled
+  # - CKV_AWS_58    # Ensure EKS Cluster has Secrets Encryption enabled
 
-  # Security Groups / VPC
-  - CKV_AWS_23    # Ensure every security group rule has a description
-  - CKV_AWS_24    # Ensure no security groups allow ingress from 0.0.0.0:all
-  - CKV_AWS_25    # Ensure no security groups allow ingress from 0.0.0.0:22 (Dev environment allows public SSH access)
-  - CKV_AWS_260   # Ensure no security groups allow ingress from 0.0.0.0:80
-  - CKV_AWS_277   # Ensure no security groups allow ingress from 0.0.0.0:443
-  - CKV2_AWS_5    # Ensure that Security Groups are associate to VPC
-  - CKV_AWS_130   # Ensure VPC subnets do not assign public IP by default
-  - CKV2_AWS_1    # Ensure that all NACL are attached to subnets
-  - CKV2_AWS_11   # Ensure VPC flow logging is enabled in all VPCs
-  - CKV2_AWS_12   # Ensure the default security group of every VPC restricts all traffic
-  - CKV_AWS_231   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 3389
-  - CKV_AWS_232   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 22
-  - CKV_AWS_382   # Ensure no security groups allow egress from 0.0.0.0:0 to port -1
+  # # Security Groups / VPC
+  # - CKV_AWS_23    # Ensure every security group rule has a description
+  # - CKV_AWS_24    # Ensure no security groups allow ingress from 0.0.0.0:all
+  # - CKV_AWS_25    # Ensure no security groups allow ingress from 0.0.0.0:22 (Dev environment allows public SSH access)
+  # - CKV_AWS_260   # Ensure no security groups allow ingress from 0.0.0.0:80
+  # - CKV_AWS_277   # Ensure no security groups allow ingress from 0.0.0.0:443
+  # - CKV2_AWS_5    # Ensure that Security Groups are associate to VPC
+  # - CKV_AWS_130   # Ensure VPC subnets do not assign public IP by default
+  # - CKV2_AWS_1    # Ensure that all NACL are attached to subnets
+  # - CKV2_AWS_11   # Ensure VPC flow logging is enabled in all VPCs
+  # - CKV2_AWS_12   # Ensure the default security group of every VPC restricts all traffic
+  # - CKV_AWS_231   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 3389
+  # - CKV_AWS_232   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 22
+  # - CKV_AWS_382   # Ensure no security groups allow egress from 0.0.0.0:0 to port -1
 
-  # IAM
-  - CKV_AWS_111   # Ensure IAM policies do not allow write access without constraints
-  - CKV_AWS_356   # Ensure no IAM policies allow wildcard actions on all resources
+  # # IAM
+  # - CKV_AWS_111   # Ensure IAM policies do not allow write access without constraints
+  # - CKV_AWS_356   # Ensure no IAM policies allow wildcard actions on all resources
