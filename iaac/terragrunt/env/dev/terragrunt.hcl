@@ -33,7 +33,7 @@ inputs = {
   allowed_https_cidrs  = ["0.0.0.0/0"]
 
   # EKS
-  eks_cluster_version          = "1.30"
+  eks_cluster_version          = "1.35"
   eks_endpoint_private_access  = true
   eks_endpoint_public_access   = true
   eks_public_access_cidrs      = ["0.0.0.0/0"]
@@ -42,12 +42,28 @@ inputs = {
   access_entry_username        = "cloud_user"
   access_entry_type           = "STANDARD"
 
+
+  # EKS Addons
+  eks_addons = {
+    coredns = {
+      addon_name                  = "coredns"
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
+      configuration_values = jsonencode({
+        computeType = "Fargate"
+      })
+    }
+  }
+
   # Fargate Profiles
   fargate_profiles = {
     kube-system = {
       selectors = {
         kube-system = {
           namespace = "kube-system"
+          labels = {
+            "k8s-app" = "kube-dns"
+          }
         }
       }
     }
@@ -65,12 +81,19 @@ inputs = {
         }
       }
     }
+    monitoring = {
+      selectors = {
+        monitoring = {
+          namespace = "monitoring"
+        }
+      }
+    }
   }
 
   # Tags
   tags = {
     Environment = "dev"
-    Project     = "myapp"
+    Project     = "devops-project"
     ManagedBy   = "terragrunt"
   }
 }

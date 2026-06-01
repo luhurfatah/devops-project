@@ -32,7 +32,7 @@ variable "private_subnet_ids" {
 variable "cluster_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.30"
+  default     = "1.35"
 }
 
 variable "endpoint_private_access" {
@@ -87,4 +87,29 @@ variable "access_entry_type" {
   description = "Type of the IAM principal: STANDARD, EC2_LINUX, EC2_WINDOWS"
   type        = string
   default     = "STANDARD"
+}
+
+variable "eks_addons" {
+  description = "Map of EKS addon configurations"
+  type = map(object({
+    addon_name          = string
+    addon_version       = optional(string)
+    configuration_values = optional(string)
+    resolve_conflicts_on_create = optional(string)
+    resolve_conflicts_on_update = optional(string)
+  }))
+  default = {}
+}
+
+variable "node_groups" {
+  description = "Map of EKS managed node group configurations"
+  type = map(object({
+    desired_size   = number
+    max_size       = number
+    min_size       = number
+    instance_types = list(string)
+    capacity_type  = optional(string)
+    labels         = optional(map(string))
+  }))
+  default = {}
 }

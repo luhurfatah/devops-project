@@ -1,0 +1,76 @@
+name: Stag IaaC Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Run tfsec security scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working-directory: iaac/terragrunt/env/stag
+          soft_fail: false
+
+  deploy:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    environment: stag
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::767397985067:role/github-actions-role
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Cache Terragrunt
+        uses: actions/cache@v4
+        id: cache-terragrunt
+        with:
+          path: /usr/local/bin/terragrunt
+          key: terragrunt-v0_54_3-${{ runner.os }}-amd64
+
+      - name: Setup Terragrunt
+        if: steps.cache-terragrunt.outputs.cache-hit != 'true'
+        run: |
+          wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.3/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Terragrunt ${{ github.event.inputs.action }}
+        working-directory: iaac/terragrunt/env/stag
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "plan" ]; then
+            terragrunt run-all plan -out=tfplan --terragrunt-non-interactive
+          elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
+            terragrunt run-all apply -auto-approve --terragrunt-non-interactive
+          elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            terragrunt run-all destroy -auto-approve --terragrunt-non-interactive
+          fi

@@ -53,3 +53,8 @@ output "fargate_iam_role_arn" {
   description = "The ARN of the Fargate execution IAM role"
   value       = aws_iam_role.fargate.arn
 }
+
+output "eks_addons" {
+  description = "Map of EKS addon ARNs"
+  value       = { for k, v in aws_eks_addon.this : k => v.arn }
+}

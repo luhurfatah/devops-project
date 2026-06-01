@@ -1,16 +1,8 @@
-name: IaaC Deployment
+name: Dev IaaC Deployment
 
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        type: choice
-        options:
-          - dev
-          - stag
-          - prod
       action:
         description: 'Action to perform'
         required: true
@@ -25,8 +17,25 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  security-scan:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Run tfsec security scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working-directory: iaac/terragrunt/env/dev
+          soft_fail: false
+
+  deploy:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    environment: dev
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,7 +65,7 @@ jobs:
           terragrunt --version
 
       - name: Terragrunt ${{ github.event.inputs.action }}
-        working-directory: iaac/terragrunt/env/${{ github.event.inputs.environment }}
+        working-directory: iaac/terragrunt/env/dev
         run: |
           if [ "${{ github.event.inputs.action }}" == "plan" ]; then
             terragrunt run-all plan -out=tfplan --terragrunt-non-interactive

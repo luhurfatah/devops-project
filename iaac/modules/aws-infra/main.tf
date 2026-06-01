@@ -77,4 +77,6 @@ module "eks" {
   access_entry_username        = var.access_entry_username
   access_entry_arn             = var.access_entry_arn
   access_entry_type            = var.access_entry_type
+  eks_addons                   = var.eks_addons
+  node_groups                  = var.node_groups
 }

@@ -33,6 +33,9 @@ resource "aws_iam_role_policy_attachment" "service_policy" {
   role       = aws_iam_role.cluster.name
 }
 
+# Note: AmazonEKSServicePolicy is deprecated but kept for backward compatibility.
+# It has been superseded by AmazonEKSClusterPolicy (attached above).
+# Consider removing this attachment for EKS clusters >= 1.35.
 # IAM Role for Fargate Pod Execution
 resource "aws_iam_role" "fargate" {
   name = "${var.name_prefix}-eks-fargate-role"
@@ -66,9 +69,9 @@ resource "aws_eks_cluster" "this" {
   role_arn = aws_iam_role.cluster.arn
   version  = var.cluster_version
 
-  # access_config {
-  #   authentication_mode = "API"
-  # }
+  access_config {
+    authentication_mode = "API"
+  }
 
   vpc_config {
     subnet_ids              = var.private_subnet_ids
@@ -114,6 +117,91 @@ resource "aws_eks_fargate_profile" "this" {
   ]
 }
 
+# EKS Addons
+resource "aws_eks_addon" "this" {
+  for_each = var.eks_addons
+
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = each.value.addon_name
+  addon_version               = each.value.addon_version
+  resolve_conflicts_on_create = try(each.value.resolve_conflicts_on_create, "OVERWRITE")
+  resolve_conflicts_on_update = try(each.value.resolve_conflicts_on_update, "OVERWRITE")
+
+  configuration_values = try(each.value.configuration_values, null)
+
+  depends_on = [
+    aws_eks_fargate_profile.this,
+  ]
+}
+
+# IAM Role for EKS Node Group
+resource "aws_iam_role" "node_group" {
+  name = "${var.name_prefix}-eks-node-group-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = merge(var.common_tags, {
+    Name = "${var.name_prefix}-eks-node-group-role"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "node_group_worker" {
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.node_group.name
+}
+
+resource "aws_iam_role_policy_attachment" "node_group_cni" {
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.node_group.name
+}
+
+resource "aws_iam_role_policy_attachment" "node_group_ecr" {
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.node_group.name
+}
+
+# EKS Managed Node Groups
+resource "aws_eks_node_group" "this" {
+  for_each = var.node_groups
+
+  cluster_name    = aws_eks_cluster.this.name
+  node_group_name = "${var.name_prefix}-${each.key}"
+  node_role_arn   = aws_iam_role.node_group.arn
+  subnet_ids      = var.private_subnet_ids
+
+  scaling_config {
+    desired_size = each.value.desired_size
+    max_size     = each.value.max_size
+    min_size     = each.value.min_size
+  }
+
+  instance_types = each.value.instance_types
+  capacity_type  = try(each.value.capacity_type, "ON_DEMAND")
+
+  labels = try(each.value.labels, {})
+
+  tags = merge(var.common_tags, {
+    Name = "${var.name_prefix}-${each.key}"
+  })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_group_worker,
+    aws_iam_role_policy_attachment.node_group_cni,
+    aws_iam_role_policy_attachment.node_group_ecr,
+  ]
+}
+
 # OIDC Provider for IRSA
 data "tls_certificate" "eks" {
   url = aws_eks_cluster.this.identity[0].oidc[0].issuer
@@ -148,7 +236,7 @@ resource "aws_eks_access_policy_association" "this" {
   count                      = local.access_entry_arn != null ? 1 : 0
   cluster_name               = aws_eks_cluster.this.name
   principal_arn              = local.access_entry_arn
-  policy_arn                 = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
+  policy_arn                 = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
   access_scope {
     type       = "cluster"
   }

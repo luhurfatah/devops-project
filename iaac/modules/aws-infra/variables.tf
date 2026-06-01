@@ -158,3 +158,28 @@ variable "access_entry_type" {
   type        = string
   default     = "STANDARD"
 }
+
+variable "eks_addons" {
+  description = "Map of EKS addon configurations"
+  type = map(object({
+    addon_name          = string
+    addon_version       = optional(string)
+    configuration_values = optional(string)
+    resolve_conflicts_on_create = optional(string)
+    resolve_conflicts_on_update = optional(string)
+  }))
+  default = {}
+}
+
+variable "node_groups" {
+  description = "Map of EKS managed node group configurations"
+  type = map(object({
+    desired_size   = number
+    max_size       = number
+    min_size       = number
+    instance_types = list(string)
+    capacity_type  = optional(string)
+    labels         = optional(map(string))
+  }))
+  default = {}
+}
