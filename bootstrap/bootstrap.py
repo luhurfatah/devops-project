@@ -252,7 +252,9 @@ class OIDCBootstrap:
                         "Action": "sts:AssumeRoleWithWebIdentity",
                         "Condition": {
                             "StringEquals": {
-                                f"{self.GITHUB_OIDC_HOST}:aud": audience,
+                                f"{self.GITHUB_OIDC_HOST}:aud": audience
+                            },
+                            "StringLike": {
                                 f"{self.GITHUB_OIDC_HOST}:sub": sub_values
                             }
                         }
