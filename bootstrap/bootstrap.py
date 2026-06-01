@@ -9,6 +9,7 @@ import sys
 import json
 import os
 import time
+import re
 import boto3
 import yaml
 import secrets
@@ -23,6 +24,7 @@ class S3Bootstrap:
 
     def __init__(self, region: str, config: Dict[str, Any]):
         self.region = region
+        self.config = config
         s3_config = config.get("s3", {})
         project_name = config.get("project", {}).get("name", "myapp")
 
@@ -42,11 +44,20 @@ class S3Bootstrap:
         try:
             try:
                 self.s3_client.head_bucket(Bucket=self.bucket_name)
-                print(f"  Bucket {self.bucket_name} already exists, skipping creation.")
+                print(f"  Bucket {self.bucket_name} already exists and is accessible, skipping creation.")
                 return {"status": "exists", "bucket": self.bucket_name}
             except ClientError as e:
                 error_code = e.response["Error"]["Code"]
-                if error_code not in ("404", "NoSuchBucket"):
+                
+                # If we get a 403 Forbidden or AccessDenied, it means the bucket name is owned by another account
+                if error_code in ("403", "AccessDenied", "BucketAlreadyExists"):
+                    print(f"  [WARN] Bucket {self.bucket_name} exists but is owned by another account or inaccessible.")
+                    project_name = self.config.get("project", {}).get("name", "myapp")
+                    random_suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
+                    self.bucket_name = f"{project_name}-terraform-state-{random_suffix}"
+                    print(f"  Generated new globally unique bucket name: {self.bucket_name}")
+                    return self.create_bucket()
+                elif error_code not in ("404", "NoSuchBucket"):
                     raise
 
             # us-east-1 must NOT include LocationConstraint — all other regions must
@@ -174,7 +185,9 @@ class OIDCBootstrap:
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code == "EntityAlreadyExists":
-                arn = self._get_oidc_provider_arn(retries=10, delay=1.0)
+                # Deterministic ARN construction to bypass slow/rate-limited listing APIs
+                account_id = self._get_account_id()
+                arn = f"arn:aws:iam::{account_id}:oidc-provider/token.actions.githubusercontent.com"
                 self._oidc_provider_arn = arn
                 print(f"  OIDC provider already exists: {arn}")
                 return {
@@ -187,26 +200,8 @@ class OIDCBootstrap:
 
     def _get_oidc_provider_arn(self, retries: int = 5, delay: float = 2.0) -> str:
         """Look up the OIDC provider ARN by URL with retry for eventual consistency."""
-        for attempt in range(retries):
-            try:
-                response = self.iam_client.list_open_id_connect_providers()
-                for provider in response.get("OpenIDConnectProviderList", []):
-                    try:
-                        detail = self.iam_client.get_open_id_connect_provider(
-                            OpenIDConnectProviderArn=provider["Arn"]
-                        )
-                        url = detail.get("Url", "")
-                        if url == self.GITHUB_OIDC_URL or url == self.GITHUB_OIDC_URL.replace("https://", ""):
-                            return provider["Arn"]
-                    except ClientError as e:
-                        continue
-            except ClientError as e:
-                pass
-            if attempt < retries - 1:
-                time.sleep(delay)
-        raise RuntimeError(
-            "GitHub OIDC provider not found. Run create_oidc_provider() first."
-        )
+        account_id = self._get_account_id()
+        return f"arn:aws:iam::{account_id}:oidc-provider/token.actions.githubusercontent.com"
 
     def create_iam_role(self) -> Dict[str, Any]:
         oidc_config = self.config.get("oidc", {})
@@ -220,15 +215,13 @@ class OIDCBootstrap:
         role_name = iam_config.get("role_name", "github-actions-role")
 
         try:
-            # Idempotency: skip if role already exists
+            role_exists = False
+            role_arn = None
             try:
                 existing = self.iam_client.get_role(RoleName=role_name)
-                print(f"  IAM role {role_name} already exists, skipping creation.")
-                return {
-                    "status": "exists",
-                    "role_name": role_name,
-                    "role_arn": existing["Role"]["Arn"]
-                }
+                print(f"  IAM role {role_name} already exists. Updating configuration.")
+                role_arn = existing["Role"]["Arn"]
+                role_exists = True
             except ClientError as e:
                 if e.response["Error"]["Code"] != "NoSuchEntity":
                     raise
@@ -241,7 +234,6 @@ class OIDCBootstrap:
             audience = github_config.get("audience", "sts.amazonaws.com")
 
             # IAM OIDC condition keys use the provider hostname, NOT the ARN.
-            # Multiple condition operators must be a single dict, not a list.
             sub_values = [
                 f"repo:{org}/{repo}:ref:refs/heads/{branch}"
                 for branch in allowed_branches
@@ -258,7 +250,6 @@ class OIDCBootstrap:
                             "Federated": oidc_arn
                         },
                         "Action": "sts:AssumeRoleWithWebIdentity",
-                        # Condition must be a single dict — IAM rejects a list
                         "Condition": {
                             "StringEquals": {
                                 f"{self.GITHUB_OIDC_HOST}:aud": audience,
@@ -269,31 +260,49 @@ class OIDCBootstrap:
                 ]
             }
 
-            response = self.iam_client.create_role(
-                RoleName=role_name,
-                AssumeRolePolicyDocument=json.dumps(trust_policy),
-                MaxSessionDuration=iam_config.get("max_session_duration", 3600),
-                Tags=[{"Key": k, "Value": v} for k, v in tags_config.items()]
-            )
-
-            role_arn = response["Role"]["Arn"]
-            print(f"  Created IAM role: {role_arn}")
+            if role_exists:
+                self.iam_client.update_assume_role_policy(
+                    RoleName=role_name,
+                    PolicyDocument=json.dumps(trust_policy)
+                )
+                print(f"  Updated trust policy on role '{role_name}'")
+            else:
+                response = self.iam_client.create_role(
+                    RoleName=role_name,
+                    AssumeRolePolicyDocument=json.dumps(trust_policy),
+                    MaxSessionDuration=iam_config.get("max_session_duration", 3600),
+                    Tags=[{"Key": k, "Value": v} for k, v in tags_config.items()]
+                )
+                role_arn = response["Role"]["Arn"]
+                print(f"  Created IAM role: {role_arn}")
 
             self._attach_inline_policy(role_name, iam_config)
             self._attach_managed_policies(role_name, iam_config)
 
             return {
-                "status": "created",
+                "status": "updated" if role_exists else "created",
                 "role_name": role_name,
                 "role_arn": role_arn
             }
         except ClientError as e:
-            print(f"  Error creating IAM role: {e}")
+            print(f"  Error configuring IAM role: {e}")
             raise
 
     def _attach_inline_policy(self, role_name: str, iam_config: Dict[str, Any]) -> None:
         policy_name = iam_config.get("inline_policy_name", "default-policy")
         policy_statements = iam_config.get("inline_policy_statements", [])
+
+        if not policy_statements:
+            print(f"  No inline policy statements defined, skipping inline policy attachment.")
+            # If the policy exists, we should delete it to clean up, but since it's optional, let's just return
+            try:
+                self.iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+                print(f"  Removed obsolete inline policy '{policy_name}' from role '{role_name}'")
+            except ClientError as e:
+                # Ignore if it wasn't there
+                if e.response["Error"]["Code"] != "NoSuchEntity":
+                    raise
+            return
 
         # Normalise effect capitalisation (IAM requires "Allow"/"Deny", not "allow"/"deny")
         normalised_statements = []
@@ -353,6 +362,78 @@ def load_config(config_path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def update_project_files(config_path: str, new_bucket: str, new_role_arn: str):
+    print("\n[Post-Bootstrap] Automatically updating configuration files for current AWS account...")
+    
+    # 1. Update config.yaml with the final bucket name
+    try:
+        with open(config_path, "r") as f:
+            lines = f.readlines()
+        
+        updated_lines = []
+        for line in lines:
+            if re.match(r"^\s*bucket_name\s*:", line):
+                updated_lines.append(f'  bucket_name: "{new_bucket}"\n')
+            else:
+                updated_lines.append(line)
+                
+        with open(config_path, "w") as f:
+            f.writelines(updated_lines)
+        print(f"  -> Updated bucket name in '{config_path}'")
+    except Exception as e:
+        print(f"  [ERROR] Failed to update '{config_path}': {e}")
+
+    # 2. Update iaac/terragrunt/root.hcl S3 backend bucket
+    root_hcl_path = os.path.join(os.path.dirname(config_path), "..", "iaac", "terragrunt", "root.hcl")
+    if os.path.exists(root_hcl_path):
+        try:
+            with open(root_hcl_path, "r") as f:
+                content = f.read()
+            
+            new_content = re.sub(
+                r'(bucket\s*=\s*")[^"]*(")',
+                r'\g<1>' + new_bucket + r'\g<2>',
+                content
+            )
+            
+            with open(root_hcl_path, "w") as f:
+                f.write(new_content)
+            print(f"  -> Updated bucket in '{root_hcl_path}'")
+        except Exception as e:
+            print(f"  [ERROR] Failed to update '{root_hcl_path}': {e}")
+    else:
+        print(f"  [WARN] root.hcl not found at '{root_hcl_path}'")
+
+    # 3. Update GitHub Workflow role-to-assume values
+    workflows_dir = os.path.join(os.path.dirname(config_path), "..", ".github", "workflows")
+    if os.path.exists(workflows_dir):
+        updated_workflows = 0
+        for filename in os.listdir(workflows_dir):
+            if filename.endswith(".yml") or filename.endswith(".yaml"):
+                filepath = os.path.join(workflows_dir, filename)
+                try:
+                    with open(filepath, "r") as f:
+                        content = f.read()
+                    
+                    new_content = re.sub(
+                        r'(role-to-assume:\s*)arn:aws:iam::\d+:role/[a-zA-Z0-9_-]+',
+                        r'\g<1>' + new_role_arn,
+                        content
+                    )
+                    
+                    if new_content != content:
+                        with open(filepath, "w") as f:
+                            f.write(new_content)
+                        print(f"  -> Updated role-to-assume in '{filepath}'")
+                        updated_workflows += 1
+                except Exception as e:
+                    print(f"  [ERROR] Failed to update '{filepath}': {e}")
+        if updated_workflows == 0:
+            print("  No workflow files required role ARN updates.")
+    else:
+        print(f"  [WARN] GitHub Workflows directory not found at '{workflows_dir}'")
+
+
 def main():
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     config = load_config(config_path)
@@ -375,6 +456,12 @@ def main():
     oidc_bootstrap = OIDCBootstrap(region=region, config=config)
     oidc_results = oidc_bootstrap.run_all()
 
+    bucket = s3_results["s3_bucket"].get("bucket")
+    role_arn = oidc_results.get("iam_role", {}).get("role_arn")
+
+    if bucket and role_arn:
+        update_project_files(config_path, bucket, role_arn)
+
     print("\n" + "=" * 60)
     print("BOOTSTRAP COMPLETE")
     print("=" * 60)
@@ -383,19 +470,12 @@ def main():
         "s3_and_state": s3_results,
         "oidc_and_iam": oidc_results
     }
-
     print(json.dumps(all_results, indent=2, default=str))
 
-    bucket = s3_results["s3_bucket"].get("bucket", f"{project_name}-terraform-state")
-    role_arn = oidc_results.get("iam_role", {}).get("role_arn", "N/A")
-
     print("\nNext steps:")
-    print("  1. Add the IAM role ARN as a GitHub Actions secret (e.g. AWS_ROLE_ARN):")
-    print(f"     {role_arn}")
-    print("  2. Update your Terragrunt remote_state backend with:")
-    print(f"     bucket = \"{bucket}\"")
-    print(f"     region = \"{region}\"")
-    print("     key    = \"<env>/<component>/terraform.tfstate\"")
+    print("  1. Add the IAM role ARN as a GitHub Actions secret or trust the updated files:")
+    print(f"     Role ARN: {role_arn}")
+    print("  2. Terragrunt configurations and GitHub Workflows have been auto-updated.")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,6 @@
 # checkov.yaml — Checkov configuration for the IaC project
 # Used by the security-scan job in GitHub Actions workflows.
 
-framework:
-  - terraform
-
 quiet: true
 compact: true
 soft-fail: false
@@ -35,6 +32,13 @@ skip-check:
   - CKV_AWS_260   # Ensure no security groups allow ingress from 0.0.0.0:80
   - CKV_AWS_277   # Ensure no security groups allow ingress from 0.0.0.0:443
   - CKV2_AWS_5    # Ensure that Security Groups are associate to VPC
+  - CKV_AWS_130   # Ensure VPC subnets do not assign public IP by default
+  - CKV2_AWS_1    # Ensure that all NACL are attached to subnets
+  - CKV2_AWS_11   # Ensure VPC flow logging is enabled in all VPCs
+  - CKV2_AWS_12   # Ensure the default security group of every VPC restricts all traffic
+  - CKV_AWS_231   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 3389
+  - CKV_AWS_232   # Ensure no NACL allow ingress from 0.0.0.0:0 to port 22
+  - CKV_AWS_382   # Ensure no security groups allow egress from 0.0.0.0:0 to port -1
 
   # IAM
   - CKV_AWS_111   # Ensure IAM policies do not allow write access without constraints

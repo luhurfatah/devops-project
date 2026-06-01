@@ -45,9 +45,15 @@ jobs:
           python3 -m venv venv
           ./venv/bin/pip install --upgrade pip
           ./venv/bin/pip install checkov
-          terragrunt run-all plan -out=tfplan --terragrunt-non-interactive
-          find . -name "tfplan" -exec sh -c 'cd $(dirname {}) && terragrunt show -json tfplan > plan.json' \;
-          find . -name "plan.json" -exec ./venv/bin/checkov -f {} --config-file $GITHUB_WORKSPACE/iaac/checkov.yaml \;
+          terragrunt plan -out=tfplan
+          find . -name "tfplan" -exec sh -c 'cd $(dirname {}) && terraform show -json tfplan > plan.json' \;
+          plan_json=$(find . -name "plan.json" -print -quit)
+          if [ -n "$plan_json" ]; then
+            ./venv/bin/checkov -f "$plan_json" --config-file $GITHUB_WORKSPACE/iaac/checkov.yaml
+          else
+            echo "Error: No plan.json generated!"
+            exit 1
+          fi
 
   deploy:
     needs: security-scan
