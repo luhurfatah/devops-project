@@ -33,18 +33,6 @@ iam:
   role_name: "github-actions-role"
   # Max duration in seconds (3600 = 1 hour; max 43200 = 12 hours)
   max_session_duration: 3600
-  inline_policy_name: "devops-project-github-actions-policy"
-  # Least-privilege S3 access for Terraform state operations
-  inline_policy_statements:
-    - effect: "Allow"
-      actions:
-        - "s3:ListBucket"
-        - "s3:GetObject"
-        - "s3:PutObject"
-        - "s3:DeleteObject"
-      resource:
-        - "arn:aws:s3:::devops-project-terraform-state"
-        - "arn:aws:s3:::devops-project-terraform-state/*"
   # AdministratorAccess lets Terraform manage all resources.
   # For production: replace with a scoped custom policy.
   managed_policy_arns:

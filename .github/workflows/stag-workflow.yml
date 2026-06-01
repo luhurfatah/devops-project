@@ -17,7 +17,40 @@ permissions:
   contents: read
 
 jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::068264331860:role/github-actions-role
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Setup Terragrunt
+        run: |
+          wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.3/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Run Checkov Security Scan
+        working-directory: iaac/terragrunt/env/stag
+        run: |
+          python3 -m venv venv
+          ./venv/bin/pip install --upgrade pip
+          ./venv/bin/pip install checkov
+          terragrunt run-all plan -out=tfplan --terragrunt-non-interactive
+          find . -name "tfplan" -exec sh -c 'cd $(dirname {}) && terragrunt show -json tfplan > plan.json' \;
+          find . -name "plan.json" -exec ./venv/bin/checkov -f {} --config-file $GITHUB_WORKSPACE/iaac/checkov.yaml \;
+
   deploy:
+    needs: security-scan
     runs-on: ubuntu-latest
     environment: stag
     steps:
@@ -48,12 +81,6 @@ jobs:
           sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
           terragrunt --version
 
-      # Checkov is invoked automatically via the before_hook defined in root.hcl.
-      # It runs before every plan/apply, scanning each module directory.
-      # A non-zero exit from Checkov blocks the Terragrunt command.
-      - name: Install Checkov
-        run: pip install checkov
-
       - name: Terragrunt ${{ github.event.inputs.action }}
         working-directory: iaac/terragrunt/env/stag
         run: |
@@ -62,6 +89,5 @@ jobs:
           elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
             terragrunt run-all apply -auto-approve --terragrunt-non-interactive
           elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
-            # Checkov hook is skipped for destroy (not in hook's commands list).
             terragrunt run-all destroy -auto-approve --terragrunt-non-interactive
           fi

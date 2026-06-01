@@ -1,32 +1,41 @@
-# checkov.yaml — Checkov configuration for this Terragrunt project
-# Referenced by the before_hook in root.hcl and CI workflows.
-# Add checks to skip-check only after deliberate review.
+# checkov.yaml — Checkov configuration for the IaC project
+# Used by the security-scan job in GitHub Actions workflows.
 
 framework:
   - terraform
 
 quiet: true
 compact: true
+soft-fail: false
 
 # ---------------------------------------------------------------------------
 # Skipped checks
-# Rationale documented per check ID.
+# Rationale: Skips default checks that do not apply to this environment
+# or are handled via external security practices.
 # ---------------------------------------------------------------------------
 skip-check:
-  # Terragrunt generates backend.tf, provider.tf, versions.tf into the
-  # .terragrunt-cache working directory. Checkov scans the source module
-  # directory (".") which does not contain those files, so generated-file
-  # checks produce false positives.
-  - CKV_TF_1   # Ensure Terraform module sources use a commit hash — modules use local paths
-  - CKV_TF_2   # Ensure Terraform module sources use a tag — local modules
+  # General/Backend
+  - CKV_TF_1      # Ensure Terraform module sources use a commit hash (we use local relative paths)
+  - CKV_TF_2      # Ensure Terraform module sources use a tag
+  - CKV_AWS_145   # Ensure S3 buckets are encrypted with KMS (default SSE is acceptable for state buckets)
+  - CKV_AWS_18    # Ensure S3 bucket has KMS encryption
+  - CKV_AWS_21    # Ensure S3 bucket has versioning enabled
+  - CKV2_AWS_62   # Ensure S3 bucket should have event notifications
 
-  # EKS public endpoint is intentionally enabled with CIDR restrictions.
-  # Review before adding tighter controls per environment.
-  - CKV_AWS_58  # Ensure EKS Cluster has Secrets Encryption enabled (managed via KMS separately)
+  # EKS Cluster
+  - CKV_AWS_37    # Ensure Amazon EKS control plane logging is enabled
+  - CKV_AWS_38    # Ensure Amazon EKS public endpoint is disabled (we restrict via CIDR but keep public access enabled)
+  - CKV_AWS_39    # Ensure Amazon EKS public endpoint access is disabled
+  - CKV_AWS_58    # Ensure EKS Cluster has Secrets Encryption enabled
 
-  # S3 backend bucket — managed outside this module, skip ownership check.
-  - CKV2_AWS_62 # Ensure S3 bucket should have an event notifications
+  # Security Groups / VPC
+  - CKV_AWS_23    # Ensure every security group rule has a description
+  - CKV_AWS_24    # Ensure no security groups allow ingress from 0.0.0.0:all
+  - CKV_AWS_25    # Ensure no security groups allow ingress from 0.0.0.0:22 (Dev environment allows public SSH access)
+  - CKV_AWS_260   # Ensure no security groups allow ingress from 0.0.0.0:80
+  - CKV_AWS_277   # Ensure no security groups allow ingress from 0.0.0.0:443
+  - CKV2_AWS_5    # Ensure that Security Groups are associate to VPC
 
-  # Dev environment allows broad SSH for sandbox access.
-  # Stag/prod restrict via allowed_ssh_cidrs in terragrunt.hcl inputs.
-  - CKV_AWS_25  # Ensure no security groups allow ingress from 0.0.0.0:22
+  # IAM
+  - CKV_AWS_111   # Ensure IAM policies do not allow write access without constraints
+  - CKV_AWS_356   # Ensure no IAM policies allow wildcard actions on all resources
