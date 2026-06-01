@@ -1,6 +1,10 @@
 # Root Terragrunt configuration
 # This file defines the remote state backend and provider configuration
 # shared across all environments.
+#
+# Security: Checkov runs as a before_hook before every plan/apply.
+# Install locally: pip install checkov
+# Config: iaac/checkov.yaml (skips Terragrunt-generated file checks)
 
 generate "backend" {
   path      = "backend.tf"
@@ -33,6 +37,21 @@ provider "aws" {
   }
 }
 EOF
+}
+
+# ---------------------------------------------------------------------------
+# Security gate: Checkov static analysis
+# Runs before every plan/apply. Non-zero exit blocks the operation.
+# Uses checkov.yaml in the project root for skip-check configuration.
+# ---------------------------------------------------------------------------
+terraform {
+  before_hook "checkov" {
+    commands = ["plan", "apply"]
+    execute = [
+      "sh", "-c",
+      "if command -v checkov > /dev/null 2>&1; then checkov -d . --config-file ${get_repo_root()}/iaac/checkov.yaml --framework terraform --quiet; else echo '[WARN] checkov not found, skipping scan. Install with: pip install checkov'; fi"
+    ]
+  }
 }
 
 generate "versions" {

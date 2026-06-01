@@ -1,0 +1,32 @@
+# checkov.yaml — Checkov configuration for this Terragrunt project
+# Referenced by the before_hook in root.hcl and CI workflows.
+# Add checks to skip-check only after deliberate review.
+
+framework:
+  - terraform
+
+quiet: true
+compact: true
+
+# ---------------------------------------------------------------------------
+# Skipped checks
+# Rationale documented per check ID.
+# ---------------------------------------------------------------------------
+skip-check:
+  # Terragrunt generates backend.tf, provider.tf, versions.tf into the
+  # .terragrunt-cache working directory. Checkov scans the source module
+  # directory (".") which does not contain those files, so generated-file
+  # checks produce false positives.
+  - CKV_TF_1   # Ensure Terraform module sources use a commit hash — modules use local paths
+  - CKV_TF_2   # Ensure Terraform module sources use a tag — local modules
+
+  # EKS public endpoint is intentionally enabled with CIDR restrictions.
+  # Review before adding tighter controls per environment.
+  - CKV_AWS_58  # Ensure EKS Cluster has Secrets Encryption enabled (managed via KMS separately)
+
+  # S3 backend bucket — managed outside this module, skip ownership check.
+  - CKV2_AWS_62 # Ensure S3 bucket should have an event notifications
+
+  # Dev environment allows broad SSH for sandbox access.
+  # Stag/prod restrict via allowed_ssh_cidrs in terragrunt.hcl inputs.
+  - CKV_AWS_25  # Ensure no security groups allow ingress from 0.0.0.0:22

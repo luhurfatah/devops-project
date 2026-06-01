@@ -17,23 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  security-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Run tfsec security scan
-        uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          working-directory: iaac/terragrunt/env/dev
-          soft_fail: false
-
   deploy:
-    needs: security-scan
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -64,13 +48,20 @@ jobs:
           sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
           terragrunt --version
 
+      # Checkov is invoked automatically via the before_hook defined in root.hcl.
+      # It runs before every plan/apply, scanning each module directory.
+      # A non-zero exit from Checkov blocks the Terragrunt command.
+      - name: Install Checkov
+        run: pip install checkov
+
       - name: Terragrunt ${{ github.event.inputs.action }}
         working-directory: iaac/terragrunt/env/dev
         run: |
           if [ "${{ github.event.inputs.action }}" == "plan" ]; then
-            terragrunt run-all plan -out=tfplan --terragrunt-non-interactive
+            terragrunt run-all plan --terragrunt-non-interactive
           elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
             terragrunt run-all apply -auto-approve --terragrunt-non-interactive
           elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            # Checkov hook is skipped for destroy (not in hook's commands list).
             terragrunt run-all destroy -auto-approve --terragrunt-non-interactive
           fi
