@@ -70,3 +70,21 @@ variable "eks_cluster_security_group_id" {
   description = "Security group ID for the EKS cluster"
   type        = string
 }
+
+variable "access_entry_username" {
+  description = "IAM username to grant EKS access (will construct ARN dynamically)"
+  type        = string
+  default     = null
+}
+
+variable "access_entry_arn" {
+  description = "Full ARN of IAM principal (use this instead of access_entry_username for non-user principals)"
+  type        = string
+  default     = null
+}
+
+variable "access_entry_type" {
+  description = "Type of the IAM principal: STANDARD, EC2_LINUX, EC2_WINDOWS"
+  type        = string
+  default     = "STANDARD"
+}

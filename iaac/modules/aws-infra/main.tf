@@ -74,4 +74,7 @@ module "eks" {
   public_access_cidrs          = var.eks_public_access_cidrs
   fargate_profiles             = var.fargate_profiles
   eks_cluster_security_group_id = module.sg.eks_cluster_sg_id
+  access_entry_username        = var.access_entry_username
+  access_entry_arn             = var.access_entry_arn
+  access_entry_type            = var.access_entry_type
 }

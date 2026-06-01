@@ -140,3 +140,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "access_entry_username" {
+  description = "IAM username to grant EKS access"
+  type        = string
+  default     = null
+}
+
+variable "access_entry_arn" {
+  description = "Full ARN of IAM principal for EKS access"
+  type        = string
+  default     = null
+}
+
+variable "access_entry_type" {
+  description = "Type of IAM principal: STANDARD, EC2_LINUX, EC2_WINDOWS"
+  type        = string
+  default     = "STANDARD"
+}

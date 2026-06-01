@@ -66,6 +66,10 @@ resource "aws_eks_cluster" "this" {
   role_arn = aws_iam_role.cluster.arn
   version  = var.cluster_version
 
+  # access_config {
+  #   authentication_mode = "API"
+  # }
+
   vpc_config {
     subnet_ids              = var.private_subnet_ids
     endpoint_private_access = var.endpoint_private_access
@@ -123,4 +127,33 @@ resource "aws_iam_openid_connect_provider" "this" {
   tags = merge(var.common_tags, {
     Name = "${var.name_prefix}-eks-oidc"
   })
+}
+
+locals {
+  access_entry_arn = var.access_entry_username != null ? "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:user/${var.access_entry_username}" : var.access_entry_arn
+}
+
+resource "aws_eks_access_entry" "this" {
+  count         = local.access_entry_arn != null ? 1 : 0
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = local.access_entry_arn
+  type          = var.access_entry_type
+  user_name     = var.access_entry_username
+  tags          = merge(var.common_tags, {
+    Name = "${var.name_prefix}-eks-access-entry"
+  })
+}
+
+resource "aws_eks_access_policy_association" "this" {
+  count                      = local.access_entry_arn != null ? 1 : 0
+  cluster_name               = aws_eks_cluster.this.name
+  principal_arn              = local.access_entry_arn
+  policy_arn                 = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
+  access_scope {
+    type       = "cluster"
+  }
+
+  depends_on = [
+    aws_eks_access_entry.this
+  ]
 }

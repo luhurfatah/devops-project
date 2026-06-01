@@ -38,15 +38,16 @@ inputs = {
   eks_endpoint_public_access   = true
   eks_public_access_cidrs      = ["0.0.0.0/0"]
 
+  # IAM Access Entry
+  access_entry_username        = "cloud_user"
+  access_entry_type           = "STANDARD"
+
   # Fargate Profiles
   fargate_profiles = {
     kube-system = {
       selectors = {
         kube-system = {
           namespace = "kube-system"
-          labels = {
-            "k8s-app" = "kube-dns"
-          }
         }
       }
     }
