@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build
 # =============================================================================
-FROM golang:1.25-alpine3.20 AS build
+FROM golang:1.25-alpine AS build
 
 # Required for CGO (needed for cgo DNS resolver with Docker Compose)
 RUN apk add --no-cache --update build-base
