@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build
 # =============================================================================
-FROM golang:1.22-alpine3.20 AS build
+FROM golang:1.25-alpine3.20 AS build
 
 # Required for CGO (needed for cgo DNS resolver with Docker Compose)
 RUN apk add --no-cache --update build-base
@@ -40,6 +40,9 @@ COPY --from=build --link /out/kms-api /usr/local/bin/kms-api
 
 # Force cgo resolver at runtime (Alpine-based distroless has no /etc/nsswitch.conf)
 ENV GODEBUG=netdns=cgo
+
+# Explicit non-root user (distroless nonroot image already runs as nonroot)
+USER nonroot
 
 EXPOSE 8080
 
