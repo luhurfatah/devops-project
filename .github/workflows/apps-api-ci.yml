@@ -228,12 +228,19 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Write report to file
+        run: |
+          cat <<'EOF' > report.md
+          ${{ steps.scan-report.outputs.REPORT }}
+          EOF
+
       - name: Comment PR with scan results
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const report = `${{ steps.scan-report.outputs.REPORT }}`;
+            const fs = require('fs');
+            const report = fs.readFileSync('report.md', 'utf8');
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
