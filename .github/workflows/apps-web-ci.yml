@@ -77,7 +77,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: SAST - Trivy Static Analysis (misconfig + code)
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.CONTEXT }}
@@ -103,7 +103,7 @@ jobs:
           npm audit --audit-level=moderate > npm-audit-report.txt 2>&1 || true
 
       - name: Trivy Image Vulnerability Scan
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.meta.outputs.tags }}
@@ -112,7 +112,7 @@ jobs:
           output: trivy-image-report.txt
 
       - name: Trivy SBOM Generation
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.CONTEXT }}
