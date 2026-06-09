@@ -49,11 +49,6 @@ credentials*
 override.tf
 override.tf.json
 
-# Terragrunt generated files
-backend.tf
-provider.tf
-versions.tf
-
 # Logs
 *.log
 logs/
