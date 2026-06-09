@@ -22,6 +22,7 @@ permissions:
   contents: read
   packages: write
   pull-requests: write
+  security-events: write
 
 env:
   REGISTRY: ghcr.io
@@ -76,33 +77,60 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: SAST - Trivy Static Analysis (misconfig + code)
+      # ── SAST: Semgrep source code analysis ────────────────────────────────
+      - name: SAST - Semgrep (source code analysis)
+        run: |
+          python -m pip install semgrep --quiet
+          semgrep \
+            --config p/javascript \
+            --config p/typescript \
+            --config p/nodejs \
+            --config p/react \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif \
+            ${{ env.CONTEXT }}
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: sast-semgrep
+
+      # ── Misconfig: Trivy Dockerfile + IaC linting ─────────────────────────
+      - name: Misconfig - Trivy Dockerfile & IaC lint
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ env.CONTEXT }}
-          scanners: misconfig,vuln
+          scanners: misconfig
           format: table
           exit-code: 0
-          output: trivy-sast-report.txt
+          output: trivy-misconfig-report.txt
 
-      - name: SCA - OSV-Scanner (dependency vulnerabilities)
-        uses: google/osv-scanner-action@v2.3.8
-        continue-on-error: true
+      # ── SCA: Trivy dependency scan ─────────────────────────────────────────
+      - name: SCA - Trivy Dependency Scan (npm packages)
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-args: |-
-            -r
-            --format=json
-            --output=osv-scan-results.json
-            ${{ env.CONTEXT }}/
+          scan-type: fs
+          scan-ref: ${{ env.CONTEXT }}
+          scanners: vuln
+          format: json
+          exit-code: 0
+          output: trivy-sca-report.json
 
-      - name: npm audit (dependency check)
+      - name: SCA - npm audit
         working-directory: ${{ env.CONTEXT }}
         continue-on-error: true
         run: |
           npm audit --audit-level=moderate > npm-audit-report.txt 2>&1 || true
 
-      - name: Trivy Image Vulnerability Scan
+      # ── Image scan ─────────────────────────────────────────────────────────
+      - name: Image - Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
@@ -111,7 +139,8 @@ jobs:
           exit-code: 0
           output: trivy-image-report.txt
 
-      - name: Trivy SBOM Generation
+      # ── SBOM ───────────────────────────────────────────────────────────────
+      - name: SBOM - Trivy SPDX generation
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -121,43 +150,83 @@ jobs:
           output: trivy-sbom.spdx.json
           scanners: vuln
 
+      # ── Upload scan artifacts ──────────────────────────────────────────────
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-reports
+          path: |
+            semgrep.sarif
+            trivy-misconfig-report.txt
+            trivy-sca-report.json
+            trivy-image-report.txt
+            trivy-sbom.spdx.json
+            npm-audit-report.txt
+          retention-days: 30
+
+      # ── Combine reports for PR comment ────────────────────────────────────
       - name: Combine scan reports
         id: scan-report
         run: |
           {
             echo "REPORT<<EOF"
-            echo "## 🔍 Security Scan Results - ${{ env.IMAGE_NAME }}"
+            echo "## Security Scan Results - ${{ env.IMAGE_NAME }}"
             echo ""
-            echo "### 🧪 SAST - Trivy Static Analysis"
+
+            echo "### SAST - Semgrep"
             echo '```'
-            cat trivy-sast-report.txt 2>/dev/null || echo "No SAST report generated."
-            echo '```'
-            echo ""
-            echo "### 📦 SCA - OSV-Scanner (Dependencies)"
-            echo '```'
-            if [ -f osv-scan-results.json ]; then
+            if [ -f semgrep.sarif ]; then
+              result_count=$(jq '[.runs[].results[]] | length' semgrep.sarif 2>/dev/null || echo "0")
+              echo "Total findings: $result_count"
               jq -r '
-                .results[]? | select(.packages) |
-                "Package: \(.source?.path // "unknown")\nVulnerabilities: \([.packages[].vulnerabilities[]?] | length)\n" +
-                ([.packages[].vulnerabilities[]?] | unique_by(.id) | .[] |
-                  "  - \(.id // "N/A"): \(.summary // "N/A" | .[0:120])")
-              ' osv-scan-results.json 2>/dev/null || cat osv-scan-results.json
+                .runs[].results[] |
+                "  [\(.level // "note")] \(.ruleId // "?") — \(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // "?")"
+              ' semgrep.sarif 2>/dev/null | head -30
+              actual=$(jq '[.runs[].results[]] | length' semgrep.sarif 2>/dev/null || echo 0)
+              [ "$actual" -gt 30 ] && echo "  ... and $((actual - 30)) more findings"
             else
-              echo "No OSV scan results generated."
+              echo "No Semgrep report generated."
             fi
             echo '```'
             echo ""
-            echo "### 📦 npm Audit"
+
+            echo "### Misconfig - Trivy Dockerfile & IaC"
+            echo '```'
+            cat trivy-misconfig-report.txt 2>/dev/null || echo "No misconfig report generated."
+            echo '```'
+            echo ""
+
+            echo "### SCA - Trivy Dependency Scan"
+            echo '```'
+            if [ -f trivy-sca-report.json ]; then
+              vuln_count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-sca-report.json 2>/dev/null || echo "0")
+              echo "Total vulnerabilities found: $vuln_count"
+              jq -r '
+                .Results[]? | select(.Vulnerabilities) |
+                "Target: \(.Target // "unknown")\n" +
+                (.Vulnerabilities[] | "  - \(.VulnerabilityID // "N/A"): \(.PkgName // "?")@\(.InstalledVersion // "?") → \(.FixedVersion // "unfixed") | \(.Severity // "UNKNOWN")")
+              ' trivy-sca-report.json 2>/dev/null | head -50
+              [ "$vuln_count" -gt 50 ] && echo "  ... and $((vuln_count - 50)) more"
+            else
+              echo "No SCA report generated."
+            fi
+            echo '```'
+            echo ""
+
+            echo "### SCA - npm Audit"
             echo '```'
             cat npm-audit-report.txt 2>/dev/null || echo "No npm audit report generated."
             echo '```'
             echo ""
-            echo "### 🐳 Trivy Image Scan"
+
+            echo "### Image - Trivy Scan"
             echo '```'
-            cat trivy-image-report.txt
+            cat trivy-image-report.txt 2>/dev/null || echo "No image scan report generated."
             echo '```'
             echo ""
-            echo "### 📋 SBOM (Dependency Inventory)"
+
+            echo "### SBOM - Dependency Inventory"
             echo '```'
             if [ -f trivy-sbom.spdx.json ]; then
               pkg_count=$(jq '.packages | length' trivy-sbom.spdx.json 2>/dev/null || echo "unknown")
@@ -185,7 +254,7 @@ jobs:
             });
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Job 2: Push image to GHCR (only on push, not PR)
+  # Job 2: Push image to GHCR (only on push to main, not PR)
   # ──────────────────────────────────────────────────────────────────────────
   push:
     name: Push to GHCR
