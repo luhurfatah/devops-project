@@ -26,10 +26,171 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: web
+  CONTEXT: apps/web
 
 jobs:
-  build-and-push:
-    name: Build & Push Web
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: Build image + run all security scans
+  # ──────────────────────────────────────────────────────────────────────────
+  scan:
+    name: Build & Scan
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=${{ github.event.inputs.tag || 'latest' }}
+
+      - name: Build image (load for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.CONTEXT }}
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: SAST - Trivy Static Analysis (misconfig + code)
+        uses: aquasecurity/trivy-action@v0.29.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.CONTEXT }}
+          scanners: misconfig,vuln
+          format: table
+          exit-code: 0
+          output: trivy-sast-report.txt
+
+      - name: SCA - OSV-Scanner (dependency vulnerabilities)
+        uses: google/osv-scanner-action@v2.3.8
+        continue-on-error: true
+        with:
+          scan-args: |-
+            -r
+            --format=json
+            --output=osv-scan-results.json
+            ${{ env.CONTEXT }}/
+
+      - name: npm audit (dependency check)
+        working-directory: ${{ env.CONTEXT }}
+        continue-on-error: true
+        run: |
+          npm audit --audit-level=moderate > npm-audit-report.txt 2>&1 || true
+
+      - name: Trivy Image Vulnerability Scan
+        uses: aquasecurity/trivy-action@v0.29.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: table
+          exit-code: 0
+          output: trivy-image-report.txt
+
+      - name: Trivy SBOM Generation
+        uses: aquasecurity/trivy-action@v0.29.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.CONTEXT }}
+          format: spdx-json
+          exit-code: 0
+          output: trivy-sbom.spdx.json
+          scanners: vuln
+
+      - name: Combine scan reports
+        id: scan-report
+        run: |
+          {
+            echo "REPORT<<EOF"
+            echo "## 🔍 Security Scan Results - ${{ env.IMAGE_NAME }}"
+            echo ""
+            echo "### 🧪 SAST - Trivy Static Analysis"
+            echo '```'
+            cat trivy-sast-report.txt 2>/dev/null || echo "No SAST report generated."
+            echo '```'
+            echo ""
+            echo "### 📦 SCA - OSV-Scanner (Dependencies)"
+            echo '```'
+            if [ -f osv-scan-results.json ]; then
+              jq -r '
+                .results[]? | select(.packages) |
+                "Package: \(.source?.path // "unknown")\nVulnerabilities: \([.packages[].vulnerabilities[]?] | length)\n" +
+                ([.packages[].vulnerabilities[]?] | unique_by(.id) | .[] |
+                  "  - \(.id // "N/A"): \(.summary // "N/A" | .[0:120])")
+              ' osv-scan-results.json 2>/dev/null || cat osv-scan-results.json
+            else
+              echo "No OSV scan results generated."
+            fi
+            echo '```'
+            echo ""
+            echo "### 📦 npm Audit"
+            echo '```'
+            cat npm-audit-report.txt 2>/dev/null || echo "No npm audit report generated."
+            echo '```'
+            echo ""
+            echo "### 🐳 Trivy Image Scan"
+            echo '```'
+            cat trivy-image-report.txt
+            echo '```'
+            echo ""
+            echo "### 📋 SBOM (Dependency Inventory)"
+            echo '```'
+            if [ -f trivy-sbom.spdx.json ]; then
+              pkg_count=$(jq '.packages | length' trivy-sbom.spdx.json 2>/dev/null || echo "unknown")
+              echo "Total packages: $pkg_count"
+              jq -r '.packages[] | "  - \(.name // "unknown")@\(.versionInfo // "?")"' trivy-sbom.spdx.json 2>/dev/null | head -30
+              [ "$pkg_count" -gt 30 ] 2>/dev/null && echo "  ... and $((pkg_count - 30)) more"
+            else
+              echo "No SBOM generated."
+            fi
+            echo '```'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR with scan results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.scan-report.outputs.REPORT }}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: Push image to GHCR (only on push, not PR)
+  # ──────────────────────────────────────────────────────────────────────────
+  push:
+    name: Push to GHCR
+    needs: scan
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
@@ -58,146 +219,10 @@ jobs:
             type=sha,prefix=,suffix=,format=short
             type=raw,value=${{ github.event.inputs.tag || 'latest' }}
 
-      - name: Build image (for PR scanning, no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: apps/web
-          load: true
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # ── SAST: Static Analysis with Trivy (misconfig + code scanners) ──
-      - name: SAST - Trivy Static Analysis (misconfig + code)
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: fs
-          scan-ref: apps/web
-          scanners: misconfig,vuln
-          format: table
-          exit-code: 0
-          output: trivy-sast-report.txt
-
-      # ── SCA: Software Composition Analysis with osv-scanner ──
-      - name: SCA - OSV-Scanner (dependency vulnerabilities)
-        uses: google/osv-scanner-action@v1.0.2
-        continue-on-error: true
-        with:
-          scan-args: |-
-            -r
-            --format=json
-            --output=osv-scan-results.json
-            apps/web/
-
-      # ── npm audit (additional JS dependency check) ──
-      - name: npm audit (dependency check)
-        working-directory: apps/web
-        continue-on-error: true
-        run: |
-          npm audit --audit-level=moderate > npm-audit-report.txt 2>&1 || true
-
-      # ── Container / Image Vulnerability Scan ──
-      - name: Trivy Image Vulnerability Scan
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: image
-          image-ref: ${{ steps.meta.outputs.tags }}
-          format: table
-          exit-code: 0
-          output: trivy-image-report.txt
-
-      # ── SBOM Generation (dependency inventory) ──
-      - name: Trivy SBOM Generation
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: fs
-          scan-ref: apps/web
-          format: spdx-json
-          exit-code: 0
-          output: trivy-sbom.spdx.json
-          scanners: vuln
-
-      # ── Combine all reports into a single PR comment ──
-      - name: Combine scan reports
-        id: scan-report
-        run: |
-          {
-            echo "REPORT<<EOF"
-            echo "## 🔍 Security Scan Results - ${{ env.IMAGE_NAME }}"
-            echo ""
-            echo "### 🧪 SAST - Trivy Static Analysis (Misconfig + Code)"
-            echo '```'
-            if [ -f trivy-sast-report.txt ]; then
-              cat trivy-sast-report.txt
-            else
-              echo "No SAST report generated."
-            fi
-            echo '```'
-            echo ""
-            echo "### 📦 SCA - OSV-Scanner (Dependency Vulnerabilities)"
-            echo '```'
-            if [ -f osv-scan-results.json ]; then
-              jq -r '
-                .results[]? | select(.packages) |
-                "Package: \(.source?.path // "unknown")\nVulnerabilities: \([.packages[].vulnerabilities[]?] | length)\n" +
-                ([.packages[].vulnerabilities[]?] | unique_by(.id) | .[] |
-                  "  - \(.id // "N/A"): \(.summary // "N/A" | .[0:120])")
-              ' osv-scan-results.json 2>/dev/null || cat osv-scan-results.json | python3 -m json.tool 2>/dev/null || cat osv-scan-results.json
-            else
-              echo "No OSV scan results generated."
-            fi
-            echo '```'
-            echo ""
-            echo "### 📦 npm Audit"
-            echo '```'
-            if [ -f npm-audit-report.txt ]; then
-              cat npm-audit-report.txt
-            else
-              echo "No npm audit report generated."
-            fi
-            echo '```'
-            echo ""
-            echo "### 🐳 Trivy Image Vulnerability Scan"
-            echo '```'
-            cat trivy-image-report.txt
-            echo '```'
-            echo ""
-            echo "### 📋 Trivy SBOM (Dependency Inventory)"
-            echo '```'
-            if [ -f trivy-sbom.spdx.json ]; then
-              pkg_count=$(jq '.packages | length' trivy-sbom.spdx.json 2>/dev/null || echo "unknown")
-              echo "Total packages detected: $pkg_count"
-              jq -r '.packages[] | "  - \(.name // "unknown")@\(.versionInfo // "?")"' trivy-sbom.spdx.json 2>/dev/null | head -30
-              if [ "$pkg_count" -gt 30 ] 2>/dev/null; then
-                echo "  ... and $((pkg_count - 30)) more"
-              fi
-            else
-              echo "No SBOM generated."
-            fi
-            echo '```'
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Comment PR with scan results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const report = `${{ steps.scan-report.outputs.REPORT }}`;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
-
       - name: Push image to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
-          context: apps/web
+          context: ${{ env.CONTEXT }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
