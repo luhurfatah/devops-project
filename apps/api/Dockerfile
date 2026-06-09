@@ -1,39 +1,52 @@
-# ─── Build stage ─────────────────────────────────────────────────────────
-FROM golang:1.22-alpine AS build
+# =============================================================================
+# Stage 1: Build
+# =============================================================================
+FROM golang:1.25-alpine AS build
 
-# gcc/musl-dev are needed because we build with CGO enabled (see below).
-RUN apk add --no-cache build-base
+# Required for CGO (needed for cgo DNS resolver with Docker Compose)
+RUN apk add --no-cache --update build-base
 
 WORKDIR /src
 
-# Download dependencies first (cached unless go.mod/go.sum change).
+# Cache module downloads independently of source changes
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download -x
 
-# Build with CGO so the binary can use the C library resolver (getaddrinfo).
-# This avoids Go's pure-Go DNS resolver, which fails to resolve Docker Compose
-# service names against Docker's embedded DNS (127.0.0.11) on some hosts (notably
-# WSL2), reporting "lookup db on 127.0.0.11:53: server misbehaving".
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /out/kms-api .
 
-# ─── Runtime stage ───────────────────────────────────────────────────────
-FROM alpine:3.20
+# Build with CGO enabled; strip debug symbols for smaller binary
+RUN CGO_ENABLED=1 \
+    GOOS=linux \
+    GOARCH=amd64 \
+    go build \
+        -ldflags="-s -w -buildid=" \
+        -trimpath \
+        -o /out/kms-api .
 
-RUN apk add --no-cache ca-certificates wget \
-    && adduser -D -u 10001 app
-USER app
+# =============================================================================
+# Stage 2: Runtime (distroless static)
+# =============================================================================
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
-COPY --from=build /out/kms-api /usr/local/bin/kms-api
+# OCI annotations
+LABEL org.opencontainers.image.title="KMS API"
+LABEL org.opencontainers.image.description="Key Management System API backend"
+LABEL org.opencontainers.image.source="https://github.com/your-org/your-repo"
+LABEL org.opencontainers.image.licenses="MIT"
 
-# Force the cgo/getaddrinfo resolver at runtime. Alpine has no /etc/nsswitch.conf,
-# so without this Go would silently fall back to its pure-Go resolver even though
-# the binary was built with CGO.
+# Copy only the compiled binary from the build stage
+COPY --from=build --link /out/kms-api /usr/local/bin/kms-api
+
+# Force cgo resolver at runtime (Alpine-based distroless has no /etc/nsswitch.conf)
 ENV GODEBUG=netdns=cgo
+
+# Explicit non-root user (distroless nonroot image already runs as nonroot)
+USER nonroot
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
-    CMD wget -qO- http://localhost:8080/api/health || exit 1
+    CMD ["kms-api", "health"]
 
 ENTRYPOINT ["kms-api"]
