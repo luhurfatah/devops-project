@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload Semgrep SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('semgrep.sarif') != ''
         with:
           sarif_file: semgrep.sarif
           category: sast-semgrep
@@ -130,11 +130,15 @@ jobs:
           npm audit --audit-level=moderate > npm-audit-report.txt 2>&1 || true
 
       # ── Image scan ─────────────────────────────────────────────────────────
+      - name: Get first image tag
+        id: first-tag
+        run: echo "tag=$(echo "${{ steps.meta.outputs.tags }}" | head -1)" >> "$GITHUB_OUTPUT"
+
       - name: Image - Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ steps.meta.outputs.tags }}
+          image-ref: ${{ steps.first-tag.outputs.tag }}
           format: table
           exit-code: 0
           output: trivy-image-report.txt
