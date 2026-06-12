@@ -1,0 +1,36 @@
+# ─── Development Environment Values ───────────────────────────
+# Overrides for the kms-app Helm chart in dev environment.
+
+global:
+  environment: dev
+
+replicaCount: 1
+
+api:
+  image:
+    tag: "latest"
+  resources:
+    requests:
+      cpu: "128m"
+      memory: "128Mi"
+    limits:
+      cpu: "256m"
+      memory: "256Mi"
+
+web:
+  image:
+    tag: "latest"
+  resources:
+    requests:
+      cpu: "64m"
+      memory: "64Mi"
+    limits:
+      cpu: "128m"
+      memory: "128Mi"
+
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  hostname: "dev.api.example.com"

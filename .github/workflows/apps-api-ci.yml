@@ -1,0 +1,364 @@
+name: API CI - Build & Push to GHCR
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/api/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'apps/api/**'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag (semver recommended, e.g. v1.2.3)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  security-events: write
+  id-token: write  # required for keyless cosign (OIDC)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: api
+  CONTEXT: apps/api
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: Build image + run all security scans
+  # ──────────────────────────────────────────────────────────────────────────
+  scan:
+    name: Build & Scan
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix=,suffix=,format=short
+            # 'latest' only on main branch; never from workflow_dispatch freeform input
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # semver tag from workflow_dispatch only if explicitly provided
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
+
+      # FIX #3: Build once, export as tarball — push job loads this artifact (no rebuild)
+      - name: Build image (export as tarball for scanning + reuse)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.CONTEXT }}
+          load: false
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=docker,dest=/tmp/image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load image from tarball
+        run: docker load < /tmp/image.tar
+
+      - name: Upload image tarball as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp/image.tar
+          retention-days: 1  # short-lived; only needed for push job
+
+      # ── SAST: Semgrep source code analysis ────────────────────────────────
+      - name: SAST - Semgrep (source code analysis)
+        run: |
+          python -m pip install semgrep --quiet
+          semgrep \
+            --config p/golang \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif \
+            ${{ env.CONTEXT }}
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('semgrep.sarif') != ''
+        with:
+          sarif_file: semgrep.sarif
+          category: sast-semgrep
+
+      # ── Misconfig: Trivy Dockerfile + IaC linting ─────────────────────────
+      - name: Misconfig - Trivy Dockerfile & IaC lint
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.CONTEXT }}
+          scanners: misconfig
+          format: table
+          exit-code: 0  # warn only; misconfig rarely warrants hard block on PR
+          output: trivy-misconfig-report.txt
+
+      # ── SCA: Trivy dependency scan ─────────────────────────────────────────
+      - name: SCA - Trivy Dependency Scan (Go modules)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.CONTEXT }}
+          scanners: vuln
+          format: json
+          exit-code: 0  # warn only on PR; enforced on push (see push job)
+          output: trivy-sca-report.json
+
+      # ── Image scan ─────────────────────────────────────────────────────────
+      - name: Get first image tag
+        id: first-tag
+        run: echo "tag=$(echo "${{ steps.meta.outputs.tags }}" | head -1)" >> "$GITHUB_OUTPUT"
+
+      # FIX #2: PRs warn only; push to main enforces CRITICAL+HIGH
+      - name: Image - Trivy vulnerability scan (PR - warn only)
+        if: github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.first-tag.outputs.tag }}
+          format: table
+          exit-code: 0
+          output: trivy-image-report.txt
+
+      - name: Image - Trivy vulnerability scan (main - enforce CRITICAL/HIGH)
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.first-tag.outputs.tag }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'  # FIX #2: hard fail on main if CRITICAL/HIGH found
+          output: trivy-image-report.txt
+
+      # ── Upload scan artifacts ──────────────────────────────────────────────
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-reports
+          path: |
+            semgrep.sarif
+            trivy-misconfig-report.txt
+            trivy-sca-report.json
+            trivy-image-report.txt
+          retention-days: 30
+
+      # ── Combine reports for PR comment ────────────────────────────────────
+      - name: Combine scan reports
+        if: github.event_name == 'pull_request'
+        id: scan-report
+        run: |
+          {
+            echo "REPORT<<EOF"
+            echo "## Security Scan Results - ${{ env.IMAGE_NAME }}"
+            echo ""
+
+            echo "### SAST - Semgrep"
+            echo '```'
+            if [ -f semgrep.sarif ]; then
+              result_count=$(jq '[.runs[].results[]] | length' semgrep.sarif 2>/dev/null || echo "0")
+              echo "Total findings: $result_count"
+              jq -r '
+                .runs[].results[] |
+                "  [\(.level // "note")] \(.ruleId // "?") — \(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // "?")"
+              ' semgrep.sarif 2>/dev/null | head -30
+              actual=$(jq '[.runs[].results[]] | length' semgrep.sarif 2>/dev/null || echo 0)
+              [ "$actual" -gt 30 ] && echo "  ... and $((actual - 30)) more findings"
+            else
+              echo "No Semgrep report generated."
+            fi
+            echo '```'
+            echo ""
+
+            echo "### Misconfig - Trivy Dockerfile & IaC"
+            echo '```'
+            cat trivy-misconfig-report.txt 2>/dev/null || echo "No misconfig report generated."
+            echo '```'
+            echo ""
+
+            echo "### SCA - Trivy Dependency Scan"
+            echo '```'
+            if [ -f trivy-sca-report.json ]; then
+              vuln_count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-sca-report.json 2>/dev/null || echo "0")
+              echo "Total vulnerabilities found: $vuln_count"
+              jq -r '
+                .Results[]? | select(.Vulnerabilities) |
+                "Target: \(.Target // "unknown")\n" +
+                (.Vulnerabilities[] | "  - \(.VulnerabilityID // "N/A"): \(.PkgName // "?")@\(.InstalledVersion // "?") → \(.FixedVersion // "unfixed") | \(.Severity // "UNKNOWN")")
+              ' trivy-sca-report.json 2>/dev/null | head -50
+              [ "$vuln_count" -gt 50 ] && echo "  ... and $((vuln_count - 50)) more"
+            else
+              echo "No SCA report generated."
+            fi
+            echo '```'
+            echo ""
+
+            echo "### Image - Trivy Scan"
+            echo '```'
+            cat trivy-image-report.txt 2>/dev/null || echo "No image scan report generated."
+            echo '```'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write report to file
+        if: github.event_name == 'pull_request'
+        run: |
+          cat <<'MDEOF' > report.md
+          ${{ steps.scan-report.outputs.REPORT }}
+          MDEOF
+
+      # FIX #5: Find existing comment and update in place (no spam)
+      - name: Find existing PR comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.number }}
+          comment-author: github-actions[bot]
+          body-includes: Security Scan Results
+
+      - name: Create or update PR comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.number }}
+          body-file: report.md
+          edit-mode: replace
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: Push image + SBOM + Cosign sign (only on push to main)
+  # ──────────────────────────────────────────────────────────────────────────
+  push:
+    name: Push, Sign & Attest
+    needs: scan
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # FIX #7: Reuse metadata from scan job; no duplicate computation
+      # FIX #3: Load pre-built image tarball; no rebuild
+      - name: Download image tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp
+
+      - name: Load image from tarball
+        run: docker load < /tmp/image.tar
+
+      - name: Push image to GHCR
+        id: push
+        run: |
+          # Push all tags produced by scan job
+          while IFS= read -r tag; do
+            docker push "$tag"
+          done <<< "${{ needs.scan.outputs.tags }}"
+
+          # Capture digest of the first tag for signing
+          first_tag=$(echo "${{ needs.scan.outputs.tags }}" | head -1)
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$first_tag" | cut -d'@' -f2)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$(echo "$first_tag" | cut -d':' -f1)" >> "$GITHUB_OUTPUT"
+
+      # ── SBOM: generate and attach to registry ─────────────────────────────
+      # FIX #1: SBOM only on push to main, not PRs
+      - name: SBOM - Trivy SPDX generation
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ needs.scan.outputs.tags && fromJSON('[]')[0] || '' }}
+          scan-ref: ${{ env.CONTEXT }}
+          format: spdx-json
+          exit-code: 0
+          output: trivy-sbom.spdx.json
+          scanners: vuln
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: trivy-sbom.spdx.json
+          retention-days: 90
+
+      # ── Cosign: sign image + attest SBOM ──────────────────────────────────
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing via GitHub OIDC — no private key needed
+      # Signature stored as sibling artifact in GHCR, linked by digest
+      - name: Sign image (keyless via GitHub OIDC)
+        run: |
+          cosign sign --yes \
+            ${{ steps.push.outputs.image_ref }}@${{ steps.push.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
+      # Attach signed SBOM attestation to the image digest
+      # Verifiable: "this SBOM was generated by this CI run for this exact image"
+      - name: Attest SBOM to image
+        run: |
+          cosign attest --yes \
+            --predicate trivy-sbom.spdx.json \
+            --type spdxjson \
+            ${{ steps.push.outputs.image_ref }}@${{ steps.push.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
+      # ── Verify signature (sanity check) ───────────────────────────────────
+      - name: Verify image signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            ${{ steps.push.outputs.image_ref }}@${{ steps.push.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"

@@ -64,3 +64,5 @@ temp/
 *.tmp
 
 .kilo
+
+!bootstrap/versions.tf

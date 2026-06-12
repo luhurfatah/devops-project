@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kms-config
-  labels:
-    app: kms
-data:
-  seed-data: "true"
-  auth-ttl-hours: "24"

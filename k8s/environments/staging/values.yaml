@@ -1,0 +1,36 @@
+# ─── Staging Environment Values ──────────────────────────────
+# Overrides for the kms-app Helm chart in staging environment.
+
+global:
+  environment: staging
+
+replicaCount: 2
+
+api:
+  image:
+    tag: "staging"
+  resources:
+    requests:
+      cpu: "256m"
+      memory: "256Mi"
+    limits:
+      cpu: "512m"
+      memory: "512Mi"
+
+web:
+  image:
+    tag: "staging"
+  resources:
+    requests:
+      cpu: "128m"
+      memory: "128Mi"
+    limits:
+      cpu: "256m"
+      memory: "256Mi"
+
+ingress:
+  enabled: true
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  hostname: "staging.api.example.com"

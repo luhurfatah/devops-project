@@ -1,0 +1,194 @@
+# ─── Gateway API Helm Chart Values ─────────────────────────────
+# Configures Kubernetes Gateway API resources for integration
+# with AWS ALB via the AWS Load Balancer Controller.
+
+# ─── Global Settings ───────────────────────────────────────────
+global:
+  nameOverride: ""
+  fullnameOverride: ""
+
+# ─── GatewayClass Configuration ────────────────────────────────
+gatewayClass:
+  name: aws-alb
+  controllerName: gateway.k8s.aws/load-balancer-controller
+  description: "AWS ALB Gateway Class"
+  labels:
+    app: kms
+
+# ─── Gateway (ALB) Configuration ───────────────────────────────
+gateway:
+  name: kms-gateway
+  namespace: default
+  labels:
+    app: kms
+  annotations:
+    # ALB scheme: internet-facing or internal
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # IP address type: ipv4 or dualstack
+    alb.ingress.kubernetes.io/ip-address-type: ipv4
+    # Target type: ip or instance
+    alb.ingress.kubernetes.io/target-type: ip
+    # Health check configuration
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-port: "3000"
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    # SSL redirect
+    alb.ingress.kubernetes.io/ssl-redirect: "false"
+    # Subnets (optional - auto-discovered if not set)
+    # alb.ingress.kubernetes.io/subnets: subnet-abc123,subnet-def456
+    # ACM certificate ARN (optional - for HTTPS)
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::103855224992:certificate/abc123
+    # WAFv2 ACL ARN (optional)
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2::103855224992:regional/webacl/kms-waf/abc123
+    # Target group attributes (optional)
+    # alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
+
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    # Uncomment to enable HTTPS
+    # - name: https
+    #   protocol: HTTPS
+    #   port: 443
+    #   tls:
+    #     mode: Terminate
+    #     certificateRefs:
+    #       - name: kms-tls-cert
+    #         group: ""
+    #         kind: Secret
+    #   allowedRoutes:
+    #     namespaces:
+    #       from: Same
+
+# ─── HTTPRoute Configuration ───────────────────────────────────
+routes:
+  # Enable/disable route creation
+  enabled: true
+
+  # Route definitions
+  items:
+    - name: kms-web-route
+      namespace: default
+      labels:
+        app: kms
+        component: web
+      parentRefs:
+        - name: kms-gateway
+          sectionName: http
+      hostnames:
+        - kms.example.com
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /
+          backendRefs:
+            - name: kms-web
+              port: 3000
+              weight: 1
+
+    - name: kms-api-route
+      namespace: default
+      labels:
+        app: kms
+        component: api
+      parentRefs:
+        - name: kms-gateway
+          sectionName: http
+      hostnames:
+        - api.kms.example.com
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /api
+          backendRefs:
+            - name: kms-api
+              port: 8080
+              weight: 1
+
+# ─── Advanced Routing (Optional) ───────────────────────────────
+# Enable by setting advancedRoutes.enabled: true.
+advancedRoutes:
+  enabled: false
+  items:
+    # Header-based routing
+    - name: header-based-route
+      namespace: default
+      parentRefs:
+        - name: kms-gateway
+      rules:
+        - matches:
+            - headers:
+                - name: X-API-Version
+                  value: v2
+          backendRefs:
+            - name: api-v2
+              port: 80
+        - matches:
+            - headers:
+                - name: X-API-Version
+                  value: v1
+          backendRefs:
+            - name: api-v1
+              port: 80
+
+    # Traffic splitting / canary
+    - name: traffic-split-route
+      namespace: default
+      parentRefs:
+        - name: kms-gateway
+      rules:
+        - backendRefs:
+            - name: api-stable
+              port: 80
+              weight: 90
+            - name: api-canary
+              port: 80
+              weight: 10
+
+    # Query parameter routing
+    - name: query-param-route
+      namespace: default
+      parentRefs:
+        - name: kms-gateway
+      rules:
+        - matches:
+            - queryParams:
+                - name: experiment
+                  value: A
+          backendRefs:
+            - name: api-experiment-a
+              port: 80
+        - matches:
+            - queryParams:
+                - name: experiment
+                  value: B
+          backendRefs:
+            - name: api-experiment-b
+              port: 80
+
+    # Method-based routing
+    - name: method-based-route
+      namespace: default
+      parentRefs:
+        - name: kms-gateway
+      rules:
+        - matches:
+            - method: GET
+          backendRefs:
+            - name: api-read
+              port: 80
+        - matches:
+            - method: POST
+          backendRefs:
+            - name: api-write
+              port: 80
