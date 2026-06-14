@@ -14,6 +14,21 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
+# ─── Helm Provider ─────────────────────────────────────────────
+# Configure the Helm provider to authenticate with the EKS cluster
+# using aws eks get-token via the AWS CLI.
+provider "helm" {
+  kubernetes = {
+    host                   = var.cluster_endpoint
+    cluster_ca_certificate = base64decode(var.cluster_certificate_authority)
+    exec                  = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
+    }
+  }
+}
+
 # ─── IAM Policy ────────────────────────────────────────────────
 
 data "http" "iam_policy" {

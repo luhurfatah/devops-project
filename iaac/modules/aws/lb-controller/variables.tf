@@ -87,6 +87,16 @@ variable "cluster_vpc_id" {
   type        = string
 }
 
+variable "cluster_endpoint" {
+  description = "The endpoint URL for the EKS cluster API server (from eks-stack output)"
+  type        = string
+}
+
+variable "cluster_certificate_authority" {
+  description = "The base64-encoded certificate authority data for the EKS cluster (from eks-stack output)"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
