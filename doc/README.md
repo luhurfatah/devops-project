@@ -531,7 +531,7 @@ The `configure.sh` script at the project root is used to repoint the repository 
 - Setting up a new environment
 
 ```bash
-./configure.sh --account-id 103855224992 --region <REGION>
+./configure.sh --account-id 620150494570 --region <REGION>
 ```
 
 The script updates:

@@ -119,7 +119,7 @@ gateway:
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
     alb.ingress.kubernetes.io/ssl-redirect: "false"
     # Uncomment for HTTPS:
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::103855224992:certificate/abc123
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::620150494570:certificate/abc123
     # alb.ingress.kubernetes.io/subnets: subnet-abc123,subnet-def456
   listeners:
     - name: http
