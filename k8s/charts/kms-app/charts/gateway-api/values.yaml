@@ -41,9 +41,9 @@ gateway:
     # Subnets (optional - auto-discovered if not set)
     # alb.ingress.kubernetes.io/subnets: subnet-abc123,subnet-def456
     # ACM certificate ARN (optional - for HTTPS)
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::620150494570:certificate/abc123
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::021658586201:certificate/abc123
     # WAFv2 ACL ARN (optional)
-    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2::620150494570:regional/webacl/kms-waf/abc123
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2::021658586201:regional/webacl/kms-waf/abc123
     # Target group attributes (optional)
     # alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
 

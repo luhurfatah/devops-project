@@ -11,29 +11,6 @@ locals {
   }, var.tags)
 }
 
-# ─── EKS Cluster ───────────────────────────────────────────────
-resource "aws_eks_cluster" "this" {
-  name     = "${local.name_prefix}-cluster"
-  role_arn = aws_iam_role.eks_cluster.arn
-  version  = var.cluster_version
-
-  vpc_config {
-    subnet_ids              = var.private_subnet_ids
-    endpoint_private_access = var.endpoint_private_access
-    endpoint_public_access  = var.endpoint_public_access
-    public_access_cidrs     = var.public_access_cidrs
-    security_group_ids      = [var.eks_cluster_security_group_id]
-  }
-
-  access_config {
-    authentication_mode = "API_AND_CONFIG_MAP"
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "${local.name_prefix}-cluster"
-  })
-}
-
 # ─── IAM Role for EKS Cluster ──────────────────────────────────
 resource "aws_iam_role" "eks_cluster" {
   name = "${local.name_prefix}-eks-cluster-role"
@@ -64,7 +41,7 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
   role       = aws_iam_role.eks_cluster.name
 }
 
-# ─── Fargate Profiles ──────────────────────────────────────────
+# ─── IAM Role for Fargate Pod Execution ────────────────────────
 resource "aws_iam_role" "fargate_pod" {
   name = "${local.name_prefix}-fargate-pod-role"
 
@@ -89,6 +66,35 @@ resource "aws_iam_role_policy_attachment" "fargate_pod_execution" {
   role       = aws_iam_role.fargate_pod.name
 }
 
+# ─── EKS Cluster ───────────────────────────────────────────────
+resource "aws_eks_cluster" "this" {
+  name     = "${local.name_prefix}-cluster"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = var.cluster_version
+
+  vpc_config {
+    subnet_ids              = var.private_subnet_ids
+    endpoint_private_access = var.endpoint_private_access
+    endpoint_public_access  = var.endpoint_public_access
+    public_access_cidrs     = var.public_access_cidrs
+    security_group_ids      = [var.eks_cluster_security_group_id]
+  }
+
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-cluster"
+  })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_iam_role_policy_attachment.eks_vpc_resource_controller,
+  ]
+}
+
+# ─── Fargate Profiles ──────────────────────────────────────────
 resource "aws_eks_fargate_profile" "this" {
   for_each               = var.fargate_profiles
   cluster_name           = aws_eks_cluster.this.name
@@ -107,38 +113,50 @@ resource "aws_eks_fargate_profile" "this" {
   tags = merge(local.common_tags, try(each.value.tags, {}), {
     Name = "${local.name_prefix}-fargate-${each.key}"
   })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.fargate_pod_execution,
+  ]
 }
 
 # ─── Access Entries ────────────────────────────────────────────
 resource "aws_eks_access_entry" "this" {
-  count          = var.access_entry_arn != null && var.access_entry_arn != "" ? 1 : 0
-  cluster_name   = aws_eks_cluster.this.name
-  principal_arn  = var.access_entry_arn
-  type           = var.access_entry_type
-  user_name      = var.access_entry_username
+  count         = var.access_entry_arn != null && var.access_entry_arn != "" ? 1 : 0
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.access_entry_arn
+  type          = var.access_entry_type
+  user_name     = var.access_entry_username
 }
 
 resource "aws_eks_access_policy_association" "this" {
-  count          = var.access_entry_arn != null && var.access_entry_arn != "" ? 1 : 0
-  cluster_name   = aws_eks_cluster.this.name
-  policy_arn     = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn  = var.access_entry_arn
+  count         = var.access_entry_arn != null && var.access_entry_arn != "" ? 1 : 0
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = var.access_entry_arn
   access_scope {
     type = "cluster"
   }
+
+  depends_on = [
+    aws_eks_access_entry.this,
+  ]
 }
 
 # ─── EKS Add-ons ───────────────────────────────────────────────
 resource "aws_eks_addon" "this" {
-  for_each      = { for a in var.eks_addons : a.addon_name => a }
-  cluster_name  = aws_eks_cluster.this.name
-  addon_name    = each.value.addon_name
-  addon_version = try(each.value.addon_version, null)
-  configuration_values = try(each.value.configuration_values, null)
+  for_each                    = { for a in var.eks_addons : a.addon_name => a }
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = each.value.addon_name
+  addon_version               = try(each.value.addon_version, null)
+  configuration_values        = try(each.value.configuration_values, null)
   resolve_conflicts_on_create = try(each.value.resolve_conflicts_on_create, "OVERWRITE")
   resolve_conflicts_on_update = try(each.value.resolve_conflicts_on_update, "OVERWRITE")
 
   tags = local.common_tags
+
+  depends_on = [
+    aws_eks_fargate_profile.this,
+  ]
 }
 
 # NOTE: AWS Load Balancer Controller is deployed as a separate
