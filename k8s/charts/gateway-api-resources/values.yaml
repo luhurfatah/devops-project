@@ -1,6 +1,6 @@
 # ─── Gateway API Resources Helm Values ────────────────────────
-# Configures GatewayClass, Gateway, and HTTPRoute resources for
-# integration with AWS ALB via the AWS Load Balancer Controller.
+# Configures GatewayClass and Gateway resources for ALB integration.
+# HTTPRoute resources are managed by the kms-app chart.
 
 # ─── Global Settings ───────────────────────────────────────────
 nameOverride: ""
@@ -38,121 +38,8 @@ gateway:
       port: 80
       allowedRoutes:
         namespaces:
-          from: Same
+          from: All
 
 # ─── HTTPRoute Configuration ───────────────────────────────────
-routes:
-  enabled: true
-  items:
-    - name: kms-web-route
-      namespace: default
-      labels:
-        app: kms
-        component: web
-      parentRefs:
-        - name: kms-gateway
-          sectionName: http
-      hostnames:
-        - kms.example.com
-      rules:
-        - matches:
-            - path:
-                type: PathPrefix
-                value: /
-          backendRefs:
-            - name: kms-web
-              port: 3000
-              weight: 1
-
-    - name: kms-api-route
-      namespace: default
-      labels:
-        app: kms
-        component: api
-      parentRefs:
-        - name: kms-gateway
-          sectionName: http
-      hostnames:
-        - api.kms.example.com
-      rules:
-        - matches:
-            - path:
-                type: PathPrefix
-                value: /api
-          backendRefs:
-            - name: kms-api
-              port: 8080
-              weight: 1
-
-# ─── Advanced Routing (Optional) ───────────────────────────────
-advancedRoutes:
-  enabled: false
-  items:
-    - name: header-based-route
-      namespace: default
-      parentRefs:
-        - name: kms-gateway
-      rules:
-        - matches:
-            - headers:
-                - name: X-API-Version
-                  value: v2
-          backendRefs:
-            - name: api-v2
-              port: 80
-        - matches:
-            - headers:
-                - name: X-API-Version
-                  value: v1
-          backendRefs:
-            - name: api-v1
-              port: 80
-
-    - name: traffic-split-route
-      namespace: default
-      parentRefs:
-        - name: kms-gateway
-      rules:
-        - backendRefs:
-            - name: api-stable
-              port: 80
-              weight: 90
-            - name: api-canary
-              port: 80
-              weight: 10
-
-    - name: query-param-route
-      namespace: default
-      parentRefs:
-        - name: kms-gateway
-      rules:
-        - matches:
-            - queryParams:
-                - name: experiment
-                  value: A
-          backendRefs:
-            - name: api-experiment-a
-              port: 80
-        - matches:
-            - queryParams:
-                - name: experiment
-                  value: B
-          backendRefs:
-            - name: api-experiment-b
-              port: 80
-
-    - name: method-based-route
-      namespace: default
-      parentRefs:
-        - name: kms-gateway
-      rules:
-        - matches:
-            - method: GET
-          backendRefs:
-            - name: api-read
-              port: 80
-        - matches:
-            - method: POST
-          backendRefs:
-            - name: api-write
-              port: 80
+# HTTPRoute resources are now managed in the kms-app chart.
+# See k8s/charts/kms-app/templates/httproute.yaml and values.yaml

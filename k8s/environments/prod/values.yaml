@@ -28,10 +28,20 @@ web:
       cpu: "512m"
       memory: "512Mi"
 
-ingress:
-  enabled: true
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-  hostname: "api.example.com"
+routes:
+  api:
+    hostnames:
+      - api.kms.example.com
+    rules:
+      - backendRefs:
+          - name: kms-api
+            port: 80
+            weight: 1
+  web:
+    hostnames:
+      - kms.example.com
+    rules:
+      - backendRefs:
+          - name: kms-web
+            port: 80
+            weight: 1

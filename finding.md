@@ -9,7 +9,7 @@
 **[bootstrap/s3.tf:8](bootstrap/s3.tf#L8)** — The Terragrunt remote state bucket has `force_destroy = true`. If someone runs `terraform destroy` on bootstrap, all state files for every environment are permanently deleted with no recovery. This should be `false` in production.
 
 ### 3. Same AWS account for all environments
-**[dev/account.hcl](iaac/terragrunt/live/dev/account.hcl)** — All three environments (dev, stag, prod) use the same account ID `170928836252`. There's no blast-radius isolation. A mistake in dev could affect prod resources. At minimum, prod should be in its own account.
+**[dev/account.hcl](iaac/terragrunt/live/dev/account.hcl)** — All three environments (dev, stag, prod) use the same account ID `149868069474`. There's no blast-radius isolation. A mistake in dev could affect prod resources. At minimum, prod should be in its own account.
 
 ### 4. ~~No DynamoDB state lock~~ (RETRACTED — S3 native locking is correct)
 **[root.hcl:22-31](iaac/terragrunt/root.hcl#L22-L31)** — ~~The comment claims S3 native locking via `use_lockfile`, but `use_lockfile` controls Terraform's dependency lock file.~~ **Correction:** As of recent Terraform versions, `use_lockfile` **does** enable S3-native state locking (creates a `.tflock` file alongside the state in S3). DynamoDB-based locking (`dynamodb_table`) is now **deprecated** by HashiCorp in favor of this S3-native approach. The root.hcl configuration is correct, and the OIDC policy correctly grants `s3:PutObject`/`s3:DeleteObject` on `*.tflock`. No fix needed.

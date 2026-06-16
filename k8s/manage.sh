@@ -128,14 +128,14 @@ deploy() {
         "${CHARTS_DIR}/gateway-api-crds" \
         "gateway-api-crds"
 
-    # ── 2. Gateway API Resources (GatewayClass, Gateway, HTTPRoute) ──────
-    step "Phase 2/3: Gateway API Resources (GatewayClass / Gateway / HTTPRoute)"
+    # ── 2. Gateway API Resources (GatewayClass, Gateway) ─────────────────
+    step "Phase 2/3: Gateway API Resources (GatewayClass / Gateway)"
     helm_deploy_chart \
         "${CHARTS_DIR}/gateway-api-resources" \
         "gateway-api-resources"
 
-    # ── 3. KMS Application (ConfigMap, Secret, API Deployment+Service) ───
-    step "Phase 3/3: KMS Application"
+    # ── 3. KMS Application (ConfigMap, Secret, Deployments, HTTPRoutes) ──
+    step "Phase 3/3: KMS Application (API + Web + HTTPRoutes)"
     helm_deploy_chart \
         "${CHARTS_DIR}/kms-app" \
         "kms-app"
@@ -155,7 +155,7 @@ destroy() {
     helm_uninstall_release "kms-app" "kms-app"
 
     # ── 2. Gateway API Resources ─────────────────────────────────────────
-    step "Phase 2/3: Gateway API Resources (GatewayClass / Gateway / HTTPRoute)"
+    step "Phase 2/3: Gateway API Resources (GatewayClass / Gateway)"
     helm_uninstall_release "gateway-api-resources" "gateway-api-resources"
 
     # ── 3. Gateway API CRDs ──────────────────────────────────────────────
