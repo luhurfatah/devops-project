@@ -311,11 +311,12 @@ jobs:
 
       # ── SBOM: generate and attach to registry ─────────────────────────────
       # FIX #1: SBOM only on push to main, not PRs
+      # Use scan-type: fs (filesystem) — the push job doesn't have the image
+      # loaded, and the broken image-ref expression caused a fatal error
       - name: SBOM - Trivy SPDX generation
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-type: image
-          image-ref: ${{ needs.scan.outputs.tags && fromJSON('[]')[0] || '' }}
+          scan-type: fs
           scan-ref: ${{ env.CONTEXT }}
           format: spdx-json
           exit-code: 0
