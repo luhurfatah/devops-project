@@ -8,7 +8,7 @@ replicaCount: 1
 
 api:
   image:
-    tag: "b5f3ea8"
+    tag: "98b5317"
   resources:
     requests:
       cpu: "128m"
