@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Install production dependencies
 # =============================================================================
-FROM node:20-alpine3.20 AS deps
+FROM node:20-alpine3.22 AS deps
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # =============================================================================
 # Stage 2: Build (if needed — currently a plain JS app, no build step)
 # =============================================================================
-FROM node:20-alpine3.20 AS build
+FROM node:20-alpine3.22 AS build
 
 WORKDIR /app
 
@@ -23,9 +23,14 @@ COPY --link server.js ./server.js
 COPY --link public/ ./public/
 
 # =============================================================================
-# Stage 3: Runtime (distroless node)
+# Stage 3: Runtime (Alpine — minimal, actively patched)
 # =============================================================================
-FROM gcr.io/distroless/nodejs20-debian12:nonroot AS runtime
+FROM node:20-alpine3.22 AS runtime
+
+# Apply latest Alpine security patches at build time
+# Remove npm (bundled tooling) — not needed at runtime, eliminates 11+ HIGH CVEs
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn* /usr/local/bin/yarn*
 
 # OCI annotations
 LABEL org.opencontainers.image.title="KMS Web"
@@ -44,7 +49,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health', r => {process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
 
-USER nonroot
+USER node
 
 ENTRYPOINT ["node"]
 CMD ["server.js"]
