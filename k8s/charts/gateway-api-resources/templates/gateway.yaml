@@ -8,11 +8,18 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
     {{- include "gateway-api-resources.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
   annotations:
-    {{- with .Values.gateway.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- end }}
 spec:
   gatewayClassName: {{ .Values.gatewayClass.name }}
+  {{- if .Values.loadBalancerConfiguration }}
+  infrastructure:
+    parametersRef:
+      group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+      name: {{ .Values.gateway.name }}-lb-config
+  {{- end }}
   listeners:
     {{- toYaml .Values.gateway.listeners | nindent 4 }}

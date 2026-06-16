@@ -9,7 +9,7 @@ fullnameOverride: ""
 # ─── GatewayClass Configuration ────────────────────────────────
 gatewayClass:
   name: aws-alb
-  controllerName: gateway.k8s.aws/load-balancer-controller
+  controllerName: gateway.k8s.aws/alb
   description: "AWS ALB Gateway Class"
   labels:
     app: kms
@@ -20,18 +20,7 @@ gateway:
   namespace: default
   labels:
     app: kms
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/ip-address-type: ipv4
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /
-    alb.ingress.kubernetes.io/healthcheck-port: "3000"
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
-    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
-    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
-    alb.ingress.kubernetes.io/ssl-redirect: "false"
+  annotations: {}
   listeners:
     - name: http
       protocol: HTTP
@@ -39,6 +28,12 @@ gateway:
       allowedRoutes:
         namespaces:
           from: All
+
+# ─── LoadBalancerConfiguration ──────────────────────────────────
+# Gateway API CRD for ALB-specific settings (replaces alb.ingress annotations)
+loadBalancerConfiguration:
+  scheme: internet-facing
+  ipAddressType: ipv4
 
 # ─── HTTPRoute Configuration ───────────────────────────────────
 # HTTPRoute resources are now managed in the kms-app chart.

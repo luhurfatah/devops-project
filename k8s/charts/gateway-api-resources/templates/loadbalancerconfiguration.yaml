@@ -1,0 +1,32 @@
+{{- if .Values.loadBalancerConfiguration }}
+apiVersion: gateway.k8s.aws/v1beta1
+kind: LoadBalancerConfiguration
+metadata:
+  name: {{ .Values.gateway.name }}-lb-config
+  namespace: {{ .Values.gateway.namespace }}
+  labels:
+    {{- include "gateway-api-resources.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.loadBalancerConfiguration.scheme }}
+  scheme: {{ .Values.loadBalancerConfiguration.scheme | quote }}
+  {{- end }}
+  {{- if .Values.loadBalancerConfiguration.ipAddressType }}
+  ipAddressType: {{ .Values.loadBalancerConfiguration.ipAddressType | quote }}
+  {{- end }}
+  {{- if .Values.loadBalancerConfiguration.loadBalancerAttributes }}
+  loadBalancerAttributes:
+    {{- toYaml .Values.loadBalancerConfiguration.loadBalancerAttributes | nindent 4 }}
+  {{- end }}
+  {{- if .Values.loadBalancerConfiguration.loadBalancerSubnetsSelector }}
+  loadBalancerSubnetsSelector:
+    {{- toYaml .Values.loadBalancerConfiguration.loadBalancerSubnetsSelector | nindent 4 }}
+  {{- end }}
+  {{- if .Values.loadBalancerConfiguration.securityGroups }}
+  securityGroups:
+    {{- toYaml .Values.loadBalancerConfiguration.securityGroups | nindent 4 }}
+  {{- end }}
+  {{- if .Values.loadBalancerConfiguration.tags }}
+  tags:
+    {{- toYaml .Values.loadBalancerConfiguration.tags | nindent 4 }}
+  {{- end }}
+{{- end }}

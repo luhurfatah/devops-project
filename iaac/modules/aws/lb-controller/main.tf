@@ -120,6 +120,16 @@ locals {
         value = tostring(var.enable_wafv2)
       },
     ],
+    var.enable_gateway_api ? [
+      {
+        name  = "controllerConfig.featureGates.ALBGatewayAPI"
+        value = "true"
+      },
+      {
+        name  = "controllerConfig.featureGates.NLBGatewayAPI"
+        value = "true"
+      },
+    ] : [],
     [for k, v in var.extra_helm_values : {
       name  = k
       value = v
