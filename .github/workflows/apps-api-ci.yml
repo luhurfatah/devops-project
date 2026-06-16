@@ -83,7 +83,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=docker,dest=/tmp/image.tar
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Load image from tarball
         run: docker load < /tmp/image.tar
@@ -250,7 +250,7 @@ jobs:
         with:
           issue-number: ${{ github.event.number }}
           comment-author: github-actions[bot]
-          body-includes: Security Scan Results
+          body-includes: Security Scan Results - ${{ env.IMAGE_NAME }}
 
       - name: Create or update PR comment
         if: github.event_name == 'pull_request'
