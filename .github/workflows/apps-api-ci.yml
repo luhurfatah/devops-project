@@ -250,7 +250,7 @@ jobs:
         with:
           issue-number: ${{ github.event.number }}
           comment-author: github-actions[bot]
-          body-includes: Security Scan Results
+          body-includes: Security Scan Results - ${{ env.IMAGE_NAME }}
 
       - name: Create or update PR comment
         if: github.event_name == 'pull_request'
