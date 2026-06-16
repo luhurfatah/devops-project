@@ -21,7 +21,7 @@ generate "backend" {
   contents  = <<EOF
 terraform {
   backend "s3" {
-    bucket         = "terragrunt-state-170928836252-us-east-1"
+    bucket         = "terragrunt-state-149868069474-us-east-1"
     key            = "${path_relative_to_include()}/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true

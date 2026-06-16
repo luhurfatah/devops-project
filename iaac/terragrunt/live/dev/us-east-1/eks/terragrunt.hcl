@@ -39,7 +39,7 @@ inputs = {
   # ─── IAM Access Entry ─────────────────────────────────────────
   access_entry_username         = "cloud_user"
   access_entry_type             = "STANDARD"
-  access_entry_arn              = "arn:aws:iam::170928836252:user/cloud_user"
+  access_entry_arn              = "arn:aws:iam::149868069474:user/cloud_user"
 
   # ─── EKS Addons ───────────────────────────────────────────────
   eks_addons = {

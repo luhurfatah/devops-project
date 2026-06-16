@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.web.name }}
+  labels:
+    app: kms
+    component: web
+    {{- include "kms-app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      app: kms
+      component: web
+  template:
+    metadata:
+      labels:
+        app: kms
+        component: web
+        {{- include "kms-app.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Values.web.name }}
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.web.containerPort }}
+          env:
+            - name: API_URL
+              value: "http://{{ .Values.api.name }}:{{ .Values.api.servicePort }}"
+            - name: PORT
+              value: "{{ .Values.web.containerPort }}"
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.web.probes.liveness.path }}
+              port: {{ .Values.web.probes.liveness.port }}
+            initialDelaySeconds: {{ .Values.web.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.web.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.web.probes.liveness.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.web.probes.readiness.path }}
+              port: {{ .Values.web.probes.readiness.port }}
+            initialDelaySeconds: {{ .Values.web.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.web.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.web.probes.readiness.timeoutSeconds }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.web.name }}
+  labels:
+    app: kms
+    component: web
+    {{- include "kms-app.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: kms
+    component: web
+  ports:
+    - protocol: TCP
+      port: {{ .Values.web.servicePort }}
+      targetPort: {{ .Values.web.containerPort }}
+  type: ClusterIP

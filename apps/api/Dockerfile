@@ -3,9 +3,6 @@
 # =============================================================================
 FROM golang:1.25-alpine AS build
 
-# Required for CGO (needed for cgo DNS resolver with Docker Compose)
-RUN apk add --no-cache --update build-base
-
 WORKDIR /src
 
 # Cache module downloads independently of source changes
@@ -15,8 +12,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 
-# Build with CGO enabled; strip debug symbols for smaller binary
-RUN CGO_ENABLED=1 \
+# Build static binary; strip debug symbols for smaller binary
+RUN CGO_ENABLED=0 \
     GOOS=linux \
     GOARCH=amd64 \
     go build \
@@ -38,8 +35,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 # Copy only the compiled binary from the build stage
 COPY --from=build --link /out/kms-api /usr/local/bin/kms-api
 
-# Force cgo resolver at runtime (Alpine-based distroless has no /etc/nsswitch.conf)
-ENV GODEBUG=netdns=cgo
+ENV GODEBUG=netdns=go
 
 # Explicit non-root user (distroless nonroot image already runs as nonroot)
 USER nonroot

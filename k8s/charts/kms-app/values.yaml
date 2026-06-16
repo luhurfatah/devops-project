@@ -27,7 +27,7 @@ secret:
 api:
   name: kms-api
   image:
-    repository: kms-api
+    repository: ghcr.io/luhurfatah/devops-project/api
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
@@ -58,7 +58,7 @@ api:
 web:
   name: kms-web
   image:
-    repository: kms-web
+    repository: ghcr.io/luhurfatah/devops-project/web
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1

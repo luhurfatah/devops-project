@@ -1,0 +1,29 @@
+{{- range $name, $route := .Values.routes }}
+{{- if kindIs "map" $route }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "kms-app.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "kms-app.labels" $ | nindent 4 }}
+spec:
+  {{- $gateway := $route.gateway | default dict }}
+  parentRefs:
+    - name: {{ $gateway.name | default "kms-gateway" }}
+      namespace: {{ $gateway.namespace | default "default" }}
+  {{- with $route.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $route.rules }}
+    - backendRefs:
+      {{- range .backendRefs }}
+        - name: {{ .name }}
+          port: {{ .port }}
+          weight: {{ .weight }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
