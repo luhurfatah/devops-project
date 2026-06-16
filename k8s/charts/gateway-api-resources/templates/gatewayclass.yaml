@@ -6,7 +6,7 @@ metadata:
     {{- with .Values.gatewayClass.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-    {{- include "gateway-api.labels" . | nindent 4 }}
+    {{- include "gateway-api-resources.labels" . | nindent 4 }}
 spec:
   controllerName: {{ .Values.gatewayClass.controllerName }}
   description: {{ .Values.gatewayClass.description | quote }}

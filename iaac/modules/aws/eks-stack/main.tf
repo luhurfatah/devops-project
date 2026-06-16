@@ -100,7 +100,7 @@ resource "aws_eks_fargate_profile" "this" {
   cluster_name           = aws_eks_cluster.this.name
   fargate_profile_name   = each.key
   pod_execution_role_arn = aws_iam_role.fargate_pod.arn
-  subnet_ids             = try(each.value.subnet_ids, var.private_subnet_ids)
+  subnet_ids             = each.value.subnet_ids != null ? each.value.subnet_ids : var.private_subnet_ids
 
   dynamic "selector" {
     for_each = each.value.selectors

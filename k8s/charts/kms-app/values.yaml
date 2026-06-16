@@ -1,23 +1,11 @@
 # ─── KMS Application Helm Values ──────────────────────────────
-# Unified values for the KMS app, Gateway API, and AWS Load Balancer Controller.
+# Pure application chart — infrastructure (LB controller, Gateway API)
+# is deployed separately via gateway-api-crds and gateway-api-resources.
 
 # ─── Global Settings ───────────────────────────────────────────
 global:
   nameOverride: ""
   fullnameOverride: ""
-
-# ─── AWS Load Balancer Controller ─────────────────────────────
-aws-load-balancer-controller:
-  enabled: false  # Set to true to deploy the LB controller via this chart
-  clusterName: kms-eks-cluster
-  serviceAccount:
-    create: true
-    name: aws-load-balancer-controller
-  region: us-east-1
-  vpcId: ""
-  enableShield: false
-  enableWaf: false
-  enableWafv2: false
 
 # ─── Application Configuration ─────────────────────────────────
 configmap:
@@ -28,7 +16,7 @@ configmap:
 
 secret:
   name: kms-secret
-  # These values should be overridden via --set or a separate values file
+  # Override via --set or a separate values file
   data:
     database-url: "postgresql://kms:kms@kms-db:5432/kms?sslmode=disable"
     admin-username: "admin"
@@ -96,92 +84,3 @@ web:
       initialDelaySeconds: 5
       periodSeconds: 10
       timeoutSeconds: 5
-
-# ─── Gateway API Configuration ─────────────────────────────────
-gatewayClass:
-  name: aws-alb
-  controllerName: gateway.k8s.aws/load-balancer-controller
-  description: "AWS ALB Gateway Class for KMS"
-
-gateway:
-  name: kms-gateway
-  namespace: default
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/ip-address-type: ipv4
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /
-    alb.ingress.kubernetes.io/healthcheck-port: "3000"
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
-    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
-    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
-    alb.ingress.kubernetes.io/ssl-redirect: "false"
-    # Uncomment for HTTPS:
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::021658586201:certificate/abc123
-    # alb.ingress.kubernetes.io/subnets: subnet-abc123,subnet-def456
-  listeners:
-    - name: http
-      protocol: HTTP
-      port: 80
-      allowedRoutes:
-        namespaces:
-          from: Same
-    # Uncomment for HTTPS:
-    # - name: https
-    #   protocol: HTTPS
-    #   port: 443
-    #   tls:
-    #     mode: Terminate
-    #     certificateRefs:
-    #       - name: kms-tls-cert
-    #         group: ""
-    #         kind: Secret
-    #   allowedRoutes:
-    #     namespaces:
-    #       from: Same
-
-# ─── HTTPRoute Configuration ───────────────────────────────────
-routes:
-  enabled: true
-  items:
-    - name: kms-web-route
-      namespace: default
-      labels:
-        app: kms
-        component: web
-      parentRefs:
-        - name: kms-gateway
-          sectionName: http
-      hostnames:
-        - kms.example.com
-      rules:
-        - matches:
-            - path:
-                type: PathPrefix
-                value: /
-          backendRefs:
-            - name: kms-web
-              port: 3000
-              weight: 1
-
-    - name: kms-api-route
-      namespace: default
-      labels:
-        app: kms
-        component: api
-      parentRefs:
-        - name: kms-gateway
-          sectionName: http
-      hostnames:
-        - api.kms.example.com
-      rules:
-        - matches:
-            - path:
-                type: PathPrefix
-                value: /api
-          backendRefs:
-            - name: kms-api
-              port: 8080
-              weight: 1

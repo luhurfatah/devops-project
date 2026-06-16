@@ -9,10 +9,10 @@
 **[bootstrap/s3.tf:8](bootstrap/s3.tf#L8)** — The Terragrunt remote state bucket has `force_destroy = true`. If someone runs `terraform destroy` on bootstrap, all state files for every environment are permanently deleted with no recovery. This should be `false` in production.
 
 ### 3. Same AWS account for all environments
-**[dev/account.hcl](iaac/terragrunt/live/dev/account.hcl)** — All three environments (dev, stag, prod) use the same account ID `021658586201`. There's no blast-radius isolation. A mistake in dev could affect prod resources. At minimum, prod should be in its own account.
+**[dev/account.hcl](iaac/terragrunt/live/dev/account.hcl)** — All three environments (dev, stag, prod) use the same account ID `170928836252`. There's no blast-radius isolation. A mistake in dev could affect prod resources. At minimum, prod should be in its own account.
 
-### 4. No DynamoDB state lock — race condition risk
-**[root.hcl:22-31](iaac/terragrunt/root.hcl#L22-L31)** — The comment claims S3 native locking via `use_lockfile`, but `use_lockfile` controls Terraform's *dependency* lock file (`.terraform.lock.hcl`), not state locking. Without a DynamoDB lock table, two concurrent `terragrunt apply` runs could corrupt the state file. Add a DynamoDB table and reference it in the backend config.
+### 4. ~~No DynamoDB state lock~~ (RETRACTED — S3 native locking is correct)
+**[root.hcl:22-31](iaac/terragrunt/root.hcl#L22-L31)** — ~~The comment claims S3 native locking via `use_lockfile`, but `use_lockfile` controls Terraform's dependency lock file.~~ **Correction:** As of recent Terraform versions, `use_lockfile` **does** enable S3-native state locking (creates a `.tflock` file alongside the state in S3). DynamoDB-based locking (`dynamodb_table`) is now **deprecated** by HashiCorp in favor of this S3-native approach. The root.hcl configuration is correct, and the OIDC policy correctly grants `s3:PutObject`/`s3:DeleteObject` on `*.tflock`. No fix needed.
 
 ### 5. CI workflow paths are broken (not yet applied)
 **[tf-dev.yml:43](.github/workflows/tf-dev.yml#L43), [tf-stag.yml:43](.github/workflows/tf-stag.yml#L43), [tf-prod.yml:43](.github/workflows/tf-prod.yml#L43)** — All three IaC workflows reference `iaac/terragrunt/env/<env>` but the actual directory structure is `iaac/terragrunt/live/<env>/us-east-1/`. The `configure.sh` script has logic to fix this (line 195-205) but it hasn't been applied. These workflows will fail at runtime.
@@ -136,6 +136,5 @@ No `.pre-commit-config.yaml` with `terraform fmt`, `tflint`, `terraform-docs`, e
 | 6 | Dev workflow missing `needs: security-scan` | Add `needs: security-scan` to the dev deploy job |
 | 7 | API HEALTHCHECK broken in distroless | Switch to `curl`-based probe or change base image |
 | 9 | Invalid K8s version 1.35 | Change to a supported EKS version (e.g., `1.31`) |
-| 4 | No DynamoDB state lock | Add DynamoDB table + reference in root.hcl backend |
 | 2 | `force_destroy = true` on state bucket | Set to `false` |
 | 24 | Checkov pip install every CI run | Use `bridgecrewio/checkov-action` |

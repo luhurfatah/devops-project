@@ -108,23 +108,27 @@ project/
 │
 ├── k8s/                                # Kubernetes manifests
 │   ├── charts/
-│   │   └── kms-app/                    # Parent Helm chart
-│   │       ├── Chart.yaml              # Dependencies: lb-controller + gateway-api
-│   │       ├── values.yaml             # Default values
-│   │       ├── templates/
-│   │       │   ├── _helpers.tpl
-│   │       │   ├── api-deployment.yaml
-│   │       │   ├── configmap.yaml
-│   │       │   └── secret.yaml
-│   │       └── charts/
-│   │           └── gateway-api/        # Subchart: Gateway API resources
-│   │               ├── Chart.yaml
-│   │               ├── values.yaml
-│   │               └── templates/
-│   │                   ├── _helpers.tpl
-│   │                   ├── gatewayclass.yaml
-│   │                   ├── gateway.yaml
-│   │                   └── httproute.yaml
+│   │   ├── gateway-api-crds/           # Chart: Gateway API CRDs (OCI dep)
+│   │   │   ├── Chart.yaml              # Dep: envoyproxy/gateway-crds-helm
+│   │   │   ├── values.yaml             # CRDs only, envoyGateway disabled
+│   │   │   └── templates/
+│   │   │       └── _helpers.tpl
+│   │   ├── gateway-api-resources/      # Chart: GatewayClass, Gateway, HTTPRoute
+│   │   │   ├── Chart.yaml
+│   │   │   ├── values.yaml             # ALB annotations, listeners, routes
+│   │   │   └── templates/
+│   │   │       ├── _helpers.tpl
+│   │   │       ├── gatewayclass.yaml
+│   │   │       ├── gateway.yaml
+│   │   │       └── httproute.yaml
+│   │   └── kms-app/                    # Chart: Pure application (no infra)
+│   │       ├── Chart.yaml
+│   │       ├── values.yaml             # App config only
+│   │       └── templates/
+│   │           ├── _helpers.tpl
+│   │           ├── api-deployment.yaml
+│   │           ├── configmap.yaml
+│   │           └── secret.yaml
 │   └── environments/
 │       ├── dev/values.yaml
 │       ├── staging/values.yaml
@@ -252,41 +256,60 @@ Installs and configures the AWS Load Balancer Controller:
 - **IAM policy** for the controller (downloaded from official source)
 - **IAM role** with OIDC trust for the controller's service account
 - **Helm release** of `aws-load-balancer-controller` from EKS charts
-- **Gateway API CRDs** installation (v1.0.0 standard-install)
 - Configurable WAF/Shield support
+
+Note: Gateway API CRDs are deployed separately via the `gateway-api-crds` Helm chart (not Terraform).
 
 ---
 
 ## Kubernetes (K8s)
 
-### Helm Chart: kms-app
+### Architecture
 
-The `kms-app` Helm chart is the single deployment unit for the entire application stack. It has two sub-chart dependencies:
+The K8s layer is split into three independent Helm charts, each with a single responsibility:
 
-```yaml
-# Chart.yaml dependencies
-dependencies:
-  - name: aws-load-balancer-controller
-    version: "1.7.1"
-    repository: "https://aws.github.io/eks-charts"
-    condition: aws-load-balancer-controller.enabled
-  - name: gateway-api
-    version: "0.1.0"
-    repository: "file://charts/gateway-api"
-    condition: gateway-api.enabled
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Deploy Order                                                    │
+│                                                                  │
+│  1. gateway-api-crds      Install Gateway API CRDs (once)       │
+│          │                                                       │
+│          ▼                                                       │
+│  2. gateway-api-resources  Create GatewayClass, Gateway, Routes  │
+│          │                                                       │
+│          ▼                                                       │
+│  3. kms-app                Deploy API + web workloads            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-#### Templates
+### Helm Chart: gateway-api-crds
 
-| Template | Resource | Description |
-|----------|----------|-------------|
-| `api-deployment.yaml` | Deployment + Service | Go API backend (port 8080) |
-| `configmap.yaml` | ConfigMap | Application configuration |
-| `secret.yaml` | Secret | Sensitive data (sealed/base64) |
+Installs the Gateway API CRDs into the cluster using the Envoy Gateway CRDs OCI chart — no controller, just the CRDs.
 
-### Gateway API Integration
+```bash
+# Install (run once per cluster)
+helm upgrade --install gateway-api-crds ./k8s/charts/gateway-api-crds \
+  --namespace gateway-api-crds \
+  --create-namespace
+```
 
-The Gateway API subchart (`charts/gateway-api/`) provisions ALB networking using the Kubernetes Gateway API — a modern, role-oriented alternative to the traditional Ingress resource.
+**Chart details:**
+| Field | Value |
+|-------|-------|
+| OCI dependency | `oci://docker.io/envoyproxy/gateway-crds-helm` |
+| CRD channel | `standard` (Gateway API v1) |
+| Envoy Gateway CRDs | Disabled |
+
+### Helm Chart: gateway-api-resources
+
+Creates the GatewayClass, Gateway, and HTTPRoute resources that provision the AWS ALB and define routing rules.
+
+```bash
+# Install (re-deploy when routes or ALB config change)
+helm upgrade --install gateway-api-resources ./k8s/charts/gateway-api-resources \
+  --namespace default \
+  --values ./k8s/environments/dev/values.yaml
+```
 
 #### Gateway API Resource Flow
 
@@ -305,7 +328,7 @@ HTTPRoute (namespace-scoped)
 Service → Pods (Deployments)
 ```
 
-#### Subchart Templates
+#### Templates
 
 | Template | Resource | Purpose |
 |----------|----------|---------|
@@ -319,9 +342,28 @@ Service → Pods (Deployments)
 |-----------|-------------|--------|
 | `alb.ingress.kubernetes.io/scheme` | ALB accessibility | `internet-facing`, `internal` |
 | `alb.ingress.kubernetes.io/ip-address-type` | IP addressing | `ipv4`, `dualstack` |
-| `alb.ingress.kubernetes.io/target-type` | Target registration | `ip` (pod IP), `instance` (node port) |
+| `alb.ingress.kubernetes.io/target-type` | Target registration | `ip` (pod IP) |
 | `alb.ingress.kubernetes.io/healthcheck-path` | Health check endpoint | `/` |
 | `alb.ingress.kubernetes.io/certificate-arn` | ACM certificate ARN | For HTTPS termination |
+
+### Helm Chart: kms-app
+
+Pure application chart — deploys the API and web workloads with ConfigMap and Secret. No infrastructure dependencies.
+
+```bash
+# Install
+helm upgrade --install kms-app ./k8s/charts/kms-app \
+  --namespace default \
+  --values ./k8s/environments/dev/values.yaml
+```
+
+#### Templates
+
+| Template | Resource | Description |
+|----------|----------|-------------|
+| `api-deployment.yaml` | Deployment + Service | Go API backend (port 8080) |
+| `configmap.yaml` | ConfigMap | Application configuration |
+| `secret.yaml` | Secret | Sensitive data (base64-encoded) |
 
 ### Environment Overrides
 
@@ -493,13 +535,26 @@ terragrunt run-all apply
 
 ### Deploy Application
 
-Once the EKS cluster is running, deploy the application via Helm:
+Once the EKS cluster is running and the LB controller is deployed via Terraform, install the Helm charts in order:
 
 ```bash
 # Configure kubectl for the EKS cluster
-aws eks update-kubeconfig --name kms-dev --region <REGION>
+aws eks update-kubeconfig --name devops-project-dev-cluster --region us-east-1
 
-# Deploy the kms-app chart with dev values
+# Step 1: Install Gateway API CRDs (once per cluster)
+# First, build the OCI dependency
+cd k8s/charts/gateway-api-crds && helm dependency build && cd -
+# Then install
+helm upgrade --install gateway-api-crds ./k8s/charts/gateway-api-crds \
+  --namespace gateway-api-crds \
+  --create-namespace
+
+# Step 2: Deploy Gateway API resources (GatewayClass, Gateway, HTTPRoutes)
+helm upgrade --install gateway-api-resources ./k8s/charts/gateway-api-resources \
+  --namespace default \
+  --values ./k8s/environments/dev/values.yaml
+
+# Step 3: Deploy the application
 helm upgrade --install kms-app ./k8s/charts/kms-app \
   --namespace default \
   --values ./k8s/environments/dev/values.yaml
@@ -511,7 +566,7 @@ Verify the deployment:
 # Check pods
 kubectl get pods -l app=kms
 
-# Check Gateway status (ALB provisioning)
+# Check Gateway status (ALB provisioning — may take a few minutes)
 kubectl get gateway kms-gateway
 
 # Get ALB DNS name
@@ -531,7 +586,7 @@ The `configure.sh` script at the project root is used to repoint the repository 
 - Setting up a new environment
 
 ```bash
-./configure.sh --account-id 021658586201 --region <REGION>
+./configure.sh --account-id 170928836252 --region <REGION>
 ```
 
 The script updates:
@@ -667,6 +722,8 @@ kubectl describe httproute kms-web-route
 
 ```bash
 helm uninstall kms-app -n default
+helm uninstall gateway-api-resources -n default
+helm uninstall gateway-api-crds -n gateway-api-crds
 ```
 
 #### Destroy Infrastructure

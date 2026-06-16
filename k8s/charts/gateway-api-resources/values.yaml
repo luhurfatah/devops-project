@@ -1,11 +1,10 @@
-# ─── Gateway API Helm Chart Values ─────────────────────────────
-# Configures Kubernetes Gateway API resources for integration
-# with AWS ALB via the AWS Load Balancer Controller.
+# ─── Gateway API Resources Helm Values ────────────────────────
+# Configures GatewayClass, Gateway, and HTTPRoute resources for
+# integration with AWS ALB via the AWS Load Balancer Controller.
 
 # ─── Global Settings ───────────────────────────────────────────
-global:
-  nameOverride: ""
-  fullnameOverride: ""
+nameOverride: ""
+fullnameOverride: ""
 
 # ─── GatewayClass Configuration ────────────────────────────────
 gatewayClass:
@@ -22,13 +21,9 @@ gateway:
   labels:
     app: kms
   annotations:
-    # ALB scheme: internet-facing or internal
     alb.ingress.kubernetes.io/scheme: internet-facing
-    # IP address type: ipv4 or dualstack
     alb.ingress.kubernetes.io/ip-address-type: ipv4
-    # Target type: ip or instance
     alb.ingress.kubernetes.io/target-type: ip
-    # Health check configuration
     alb.ingress.kubernetes.io/healthcheck-path: /
     alb.ingress.kubernetes.io/healthcheck-port: "3000"
     alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
@@ -36,17 +31,7 @@ gateway:
     alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
-    # SSL redirect
     alb.ingress.kubernetes.io/ssl-redirect: "false"
-    # Subnets (optional - auto-discovered if not set)
-    # alb.ingress.kubernetes.io/subnets: subnet-abc123,subnet-def456
-    # ACM certificate ARN (optional - for HTTPS)
-    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm::021658586201:certificate/abc123
-    # WAFv2 ACL ARN (optional)
-    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2::021658586201:regional/webacl/kms-waf/abc123
-    # Target group attributes (optional)
-    # alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
-
   listeners:
     - name: http
       protocol: HTTP
@@ -54,26 +39,10 @@ gateway:
       allowedRoutes:
         namespaces:
           from: Same
-    # Uncomment to enable HTTPS
-    # - name: https
-    #   protocol: HTTPS
-    #   port: 443
-    #   tls:
-    #     mode: Terminate
-    #     certificateRefs:
-    #       - name: kms-tls-cert
-    #         group: ""
-    #         kind: Secret
-    #   allowedRoutes:
-    #     namespaces:
-    #       from: Same
 
 # ─── HTTPRoute Configuration ───────────────────────────────────
 routes:
-  # Enable/disable route creation
   enabled: true
-
-  # Route definitions
   items:
     - name: kms-web-route
       namespace: default
@@ -116,11 +85,9 @@ routes:
               weight: 1
 
 # ─── Advanced Routing (Optional) ───────────────────────────────
-# Enable by setting advancedRoutes.enabled: true.
 advancedRoutes:
   enabled: false
   items:
-    # Header-based routing
     - name: header-based-route
       namespace: default
       parentRefs:
@@ -141,7 +108,6 @@ advancedRoutes:
             - name: api-v1
               port: 80
 
-    # Traffic splitting / canary
     - name: traffic-split-route
       namespace: default
       parentRefs:
@@ -155,7 +121,6 @@ advancedRoutes:
               port: 80
               weight: 10
 
-    # Query parameter routing
     - name: query-param-route
       namespace: default
       parentRefs:
@@ -176,7 +141,6 @@ advancedRoutes:
             - name: api-experiment-b
               port: 80
 
-    # Method-based routing
     - name: method-based-route
       namespace: default
       parentRefs:

@@ -1,8 +1,7 @@
 # ─── AWS Load Balancer Controller Terraform Module ─────────────
-# This module deploys the AWS Load Balancer Controller on an EKS cluster
-# and configures Gateway API CRDs for ALB integration.
-# Uses values passed from the eks-stack terragrunt dependency outputs
-# instead of data sources, so terragrunt plan works with mock outputs.
+# Deploys the AWS Load Balancer Controller Helm chart on an EKS cluster
+# with IRSA (IAM Roles for Service Accounts).
+# Gateway API CRDs are deployed separately via the gateway-api-crds Helm chart.
 
 terraform {
   required_version = ">= 1.0"
@@ -90,11 +89,15 @@ locals {
       },
       {
         name  = "serviceAccount.create"
-        value = "false"
+        value = "true"
       },
       {
         name  = "serviceAccount.name"
         value = var.service_account_name
+      },
+      {
+        name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+        value = aws_iam_role.lb_controller.arn
       },
       {
         name  = "region"
@@ -125,43 +128,15 @@ locals {
 }
 
 resource "helm_release" "lb_controller" {
-  name       = "aws-load-balancer-controller"
-  namespace  = var.controller_namespace
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  version    = var.controller_chart_version
+  name             = "aws-load-balancer-controller"
+  namespace        = var.controller_namespace
+  create_namespace = true
+  repository       = "https://aws.github.io/eks-charts"
+  chart            = "aws-load-balancer-controller"
+  version          = var.controller_chart_version
 
   set = local.helm_set_values
 
   depends_on = [aws_iam_role_policy_attachment.lb_controller]
 }
 
-# ─── Gateway API CRDs ──────────────────────────────────────────
-
-resource "null_resource" "gateway_api_crds" {
-  count = var.install_gateway_api_crds ? 1 : 0
-
-  triggers = {
-    controller_version  = var.controller_chart_version
-    gateway_api_version = "v1.0.0"
-    cluster_name        = var.cluster_name
-    region              = data.aws_region.current.name
-  }
-
-  provisioner "local-exec" {
-    command = <<EOT
-      kubectl apply --kubeconfig <(aws eks update-kubeconfig --name ${self.triggers.cluster_name} --region ${self.triggers.region} --kubeconfig /dev/stdout) \
-        -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOT
-      kubectl delete --kubeconfig <(aws eks update-kubeconfig --name ${self.triggers.cluster_name} --region ${self.triggers.region} --kubeconfig /dev/stdout) \
-        -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml 2>/dev/null || true
-    EOT
-  }
-
-  depends_on = [helm_release.lb_controller]
-}

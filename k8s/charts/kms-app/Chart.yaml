@@ -1,29 +1,15 @@
 apiVersion: v2
 name: kms-app
-description: A Helm chart for deploying the KMS application with Gateway API and AWS ALB
+description: KMS application — API and web deployments, ConfigMap, and Secret
 type: application
 version: 0.1.0
 appVersion: "1.0"
 
-dependencies:
-  - name: aws-load-balancer-controller
-    version: "1.7.1"
-    repository: "https://aws.github.io/eks-charts"
-    condition: aws-load-balancer-controller.enabled
-    alias: aws-load-balancer-controller
-  - name: gateway-api
-    version: "0.1.0"
-    repository: "file://charts/gateway-api"
-    condition: gateway-api.enabled
-
 keywords:
   - kms
-  - gateway-api
-  - alb
-  - aws
-  - kubernetes
+  - api
+  - web
 
-home: https://github.com/kubernetes-sigs/aws-load-balancer-controller
 maintainers:
   - name: Platform Team
     email: platform@example.com

@@ -4,11 +4,11 @@
 # No DynamoDB table is needed.
 # ────────────────────────────────────────────────────────────────
 resource "aws_s3_bucket" "terraform_state" {
-  bucket        = "terragrunt-state-021658586201-us-east-1"
+  bucket        = "terragrunt-state-170928836252-us-east-1"
   force_destroy = true
 
   tags = {
-    Name      = "terragrunt-state-021658586201-us-east-1"
+    Name      = "terragrunt-state-170928836252-us-east-1"
     ManagedBy = "Terraform"
     Purpose   = "Terragrunt remote state"
   }

@@ -31,14 +31,13 @@ inputs = {
   cluster_vpc_id                = dependency.eks.outputs.cluster_vpc_id
   controller_namespace          = "kube-system"
   service_account_name          = "aws-load-balancer-controller"
-  controller_chart_version      = "1.7.1"
+  controller_chart_version      = "3.0.0"
   create_iam_policy             = true
   iam_policy_name               = "devops-project-stag-AWSLoadBalancerControllerPolicy"
   iam_role_name                 = "devops-project-stag-aws-load-balancer-controller-role"
   enable_shield                 = false
   enable_waf                    = false
   enable_wafv2                  = false
-  install_gateway_api_crds      = true
   extra_helm_values             = {}
   tags                          = {}
 }

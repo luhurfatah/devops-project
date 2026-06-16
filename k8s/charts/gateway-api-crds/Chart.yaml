@@ -1,0 +1,15 @@
+apiVersion: v2
+name: gateway-api-crds
+description: Installs Kubernetes Gateway API CRDs (standard channel v1.5.0)
+type: application
+version: 0.2.0
+appVersion: "v1.5.0"
+
+keywords:
+  - gateway-api
+  - crds
+  - kubernetes
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com

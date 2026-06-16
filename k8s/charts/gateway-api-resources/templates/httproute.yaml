@@ -10,7 +10,7 @@ metadata:
     {{- with .labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-    {{- include "gateway-api.labels" $ | nindent 4 }}
+    {{- include "gateway-api-resources.labels" $ | nindent 4 }}
 spec:
   parentRefs:
     {{- toYaml .parentRefs | nindent 4 }}
@@ -32,7 +32,7 @@ metadata:
   name: {{ .name }}
   namespace: {{ .namespace }}
   labels:
-    {{- include "gateway-api.labels" $ | nindent 4 }}
+    {{- include "gateway-api-resources.labels" $ | nindent 4 }}
 spec:
   parentRefs:
     {{- toYaml .parentRefs | nindent 4 }}

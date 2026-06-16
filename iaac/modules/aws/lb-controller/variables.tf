@@ -20,7 +20,7 @@ variable "service_account_name" {
 variable "controller_chart_version" {
   description = "Version of the AWS Load Balancer Controller Helm chart"
   type        = string
-  default     = "1.7.1"
+  default     = "3.0.0"
 }
 
 variable "create_iam_policy" {
@@ -65,11 +65,12 @@ variable "enable_wafv2" {
   default     = false
 }
 
-variable "install_gateway_api_crds" {
-  description = "Whether to install Gateway API CRDs"
+variable "enable_gateway_api" {
+  description = "Enable Gateway API support (ALBGatewayAPI and NLBGatewayAPI feature gates)"
   type        = bool
   default     = true
 }
+
 
 variable "extra_helm_values" {
   description = "Additional Helm values for the AWS Load Balancer Controller"

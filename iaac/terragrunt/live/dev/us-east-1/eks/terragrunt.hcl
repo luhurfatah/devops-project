@@ -39,6 +39,7 @@ inputs = {
   # ─── IAM Access Entry ─────────────────────────────────────────
   access_entry_username         = "cloud_user"
   access_entry_type             = "STANDARD"
+  access_entry_arn              = "arn:aws:iam::170928836252:user/cloud_user"
 
   # ─── EKS Addons ───────────────────────────────────────────────
   eks_addons = {
@@ -59,7 +60,7 @@ inputs = {
         kube-system = {
           namespace = "kube-system"
           labels = {
-            "k8s-app" = "kube-dns"
+            "k8s-app" = "kube-dns",
           }
         }
       }
@@ -68,6 +69,20 @@ inputs = {
       selectors = {
         default = {
           namespace = "default"
+        }
+      }
+    }
+    loadbalancer = {
+      selectors = {
+        loadbalancer = {
+          namespace = "loadbalancer"
+        }
+      }
+    }
+    gateway-api-crds = {
+      selectors = {
+        gateway-api-crds = {
+          namespace = "gateway-api-crds"
         }
       }
     }
